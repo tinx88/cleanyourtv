@@ -12,7 +12,10 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 
 import java.io.File;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
@@ -25,6 +28,8 @@ final class WallpaperPlayer {
     private final List<File> files;
     private final long interval;
     private final String order;
+    private final double latitude;
+    private final double longitude;
     private final SharedPreferences preferences;
     private final ExecutorService decoder = Executors.newSingleThreadExecutor();
     private final Random random = new Random();
@@ -43,6 +48,8 @@ final class WallpaperPlayer {
         interval = config.wallpaperRotationMinutes * 60_000L;
         bitmapConfig = config.wallpaperTrueColor ? Bitmap.Config.ARGB_8888 : Bitmap.Config.RGB_565;
         order = config.wallpaperOrder;
+        latitude = coordinate(context, R.string.latitude);
+        longitude = coordinate(context, R.string.longitude);
         preferences = context.getSharedPreferences("wallpaper_rotation", Context.MODE_PRIVATE);
         // Playback state belongs to one collection. Changing the collection starts from its first
         // picture instead of resuming a filename that belonged to the previous one.
@@ -79,8 +86,9 @@ final class WallpaperPlayer {
      */
     private void showFirst() {
         String previous = preferences.getString("image", "");
-        File first = WallpaperRotation.find(files, previous);
-        if (first == null) first = WallpaperRotation.pick(files, previous, order, random);
+        List<File> candidates = eligibleFiles();
+        File first = WallpaperRotation.find(candidates, previous);
+        if (first == null) first = WallpaperRotation.pick(candidates, previous, order, random);
         while (first != null) {
             Bitmap bitmap = decode(first);
             if (bitmap != null) {
@@ -93,7 +101,7 @@ final class WallpaperPlayer {
                 return;
             }
             files.remove(first);   // unreadable or over 4K: try another, or keep the plain colour
-            first = WallpaperRotation.pick(files, previous, order, random);
+            first = WallpaperRotation.pick(eligibleFiles(), previous, order, random);
         }
     }
 
@@ -115,10 +123,11 @@ final class WallpaperPlayer {
     void update() {
         if (!active || closed || loading || files.isEmpty()) return;
         String previous = preferences.getString("image", "");
-        File selected = WallpaperRotation.find(files, previous);
+        List<File> candidates = eligibleFiles();
+        File selected = WallpaperRotation.find(candidates, previous);
         long changed = preferences.getLong("changed", 0);
         if (selected == null || WallpaperRotation.due(changed, System.currentTimeMillis(), interval)) {
-            selected = WallpaperRotation.pick(files, previous, order, random);
+            selected = WallpaperRotation.pick(candidates, previous, order, random);
         }
         if (selected == null || selected.getName().equals(displayed)) return;
         File next = selected;
@@ -145,6 +154,25 @@ final class WallpaperPlayer {
                 }
             });
         });
+    }
+
+    /** Select the current time-of-day image group on Home launch and every minute tick. */
+    private List<File> eligibleFiles() {
+        if (!WallpaperRotation.ORDER_DAYPART.equals(order)) return files;
+        Calendar now = Calendar.getInstance();
+        int minute = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
+        int[] times = WallpaperDaypart.sunTimes(LocalDate.now(), latitude, longitude,
+                ZoneId.systemDefault());
+        return WallpaperDaypart.candidates(files,
+                WallpaperDaypart.phase(minute, times[0], times[1]));
+    }
+
+    private static double coordinate(Context ctx, int resource) {
+        try {
+            return Double.parseDouble(ctx.getString(resource).trim());
+        } catch (NumberFormatException error) {
+            return Double.NaN;
+        }
     }
 
     /** Names plus sizes: enough to notice a different collection without hashing every image. */

@@ -12,9 +12,10 @@ final class WallpaperRotation {
     /** Playback orders persisted in config.json (wallpaper_order). */
     static final String ORDER_SEQUENTIAL = "sequential";
     static final String ORDER_SHUFFLE = "shuffle";
+    static final String ORDER_DAYPART = "daypart";
 
     static boolean validOrder(String order) {
-        return ORDER_SEQUENTIAL.equals(order) || ORDER_SHUFFLE.equals(order);
+        return ORDER_SEQUENTIAL.equals(order) || ORDER_SHUFFLE.equals(order) || ORDER_DAYPART.equals(order);
     }
 
     static List<File> images(File directory) {

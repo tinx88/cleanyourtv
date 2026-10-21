@@ -18,6 +18,7 @@ powershell -ExecutionPolicy Bypass -File tools\theme.ps1 -TvHost 192.168.1.50 th
 | `aurora/` | A dark aurora wallpaper (teal and violet on navy, darker at the bottom) with a matching background colour |
 | `dussehra/` | Festive skin for Dussehra (ends 21 Oct 2026): a marigold toran, a faint gold rangoli, a diya for Wi-Fi, a bell for Inputs, a marigold for Settings and a petal shower |
 | `scenes/` | 14 dark illustrated landscapes in `wallpapers/`, a new one every hour; drawn from code by `tools/scenes_wallpapers.py` |
+| `family-time-of-day/` | Morning, day, sunset and night landscape groups selected by local sunrise/sunset (Melbourne default in this fork); 45-minute shuffle within a group |
 | `six-columns/` | Six smaller tiles per row and one grid row visible under the dock |
 
 ## Keys
@@ -61,7 +62,7 @@ is ignored, and a file that doesn't parse is ignored as a whole, so a theme can 
 | `sky_intensity` | 0 to 100 | Time-of-day backdrop: a dark gradient that follows the clock, 0 hides it (default) |
 | `wallpaper` | bool | Show `wallpaper.jpg` from the theme folder (`true`), or ignore it (`false`) |
 | `wallpaper_rotation_minutes` | 0 to 1440 | Rotate images in the theme's `wallpapers/` folder at this interval; 0 keeps the single-image behaviour. A negative or non-numeric value is ignored, and 0 means "no rotation", not "every minute" |
-| `wallpaper_order` | `shuffle` or `sequential` | How a collection advances. `shuffle` (the default, and what launchers did before this key existed) avoids repeating the current picture; `sequential` walks the folder in filename order and wraps at the end. An unknown value falls back to `shuffle` |
+| `wallpaper_order` | `shuffle`, `sequential` or `daypart` | How a collection advances. `shuffle` (the default, and what launchers did before this key existed) avoids repeating the current picture; `sequential` walks the folder in filename order and wraps at the end. An unknown value falls back to `shuffle` |
 | `wallpaper_dim` | 0 to 90 | Black overlay over wallpaper images, in percent; 0 by default and no shade view at all |
 | `festival` | string | Turns on a festive skin: the network pill becomes a diya whose flame follows the connection, Inputs a temple bell, Settings a marigold, and the first Home of the day gets a petal shower. `dussehra` and `diwali` have built-in greetings |
 | `festival_until` | `YYYY-MM-DD` | Last day the festive skin shows; it switches itself off after that. A malformed date turns it off |
@@ -142,3 +143,15 @@ the plain background; the default is off (the reference launcher looks exactly a
 Open a PR with a new folder here, a one-line row in the table above and a screenshot from a real TV
 in the PR description. Keep the dock list generic (the big streaming apps) unless the theme is for a
 specific TV, and say which TV you tried it on.
+
+
+## Family Edition: time-of-day images
+
+The optional `family-time-of-day/` theme uses `"wallpaper_order": "daypart"`.
+Its images are prefixed `morning-`, `day-`, `sunset-`, or `night-`.
+Sunrise/sunset are computed offline using the launcher build's latitude/longitude
+(defaulting to Melbourne city coordinates in this fork). A group change happens
+on the Home minute tick or when returning to Home; within a group, images rotate
+every 45 minutes. An empty group falls back to the full collection.
+
+See [Family Edition setup](../docs/family-wallpapers.md) before installing.

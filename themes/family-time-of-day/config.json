@@ -1,0 +1,9 @@
+{
+  "wallpaper": true,
+  "wallpaper_order": "daypart",
+  "wallpaper_rotation_minutes": 45,
+  "wallpaper_dim": 35,
+  "wallpaper_true_color": false,
+  "sky_intensity": 0,
+  "ambient_glow": false
+}
