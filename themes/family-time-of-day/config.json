@@ -5,5 +5,14 @@
   "wallpaper_dim": 35,
   "wallpaper_true_color": false,
   "sky_intensity": 0,
-  "ambient_glow": false
+  "ambient_glow": false,
+  "live_tv_package": "com.sony.dtv.tvx",
+  "hidden_apps": [
+    "com.sony.dtv.tvx"
+  ],
+  "dock_apps": [
+    "com.amazon.amazonvideo.livingroom",
+    "com.google.android.youtube.tv",
+    "com.disney.disneyplus"
+  ]
 }
