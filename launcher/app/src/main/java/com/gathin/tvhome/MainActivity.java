@@ -2,6 +2,7 @@ package com.gathin.tvhome;
 
 import android.animation.ArgbEvaluator;
 import android.animation.ValueAnimator;
+import android.content.res.ColorStateList;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.ActivityNotFoundException;
@@ -61,6 +62,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
+import android.widget.TextClock;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -191,6 +193,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean reducedMotion;
     /** config.xml dock_row: the first row is a separate dock (band, parked low, top shelf) rather than plain grid. */
     private boolean dockRow;
+    /** Full-screen Cosy Home clock with six compact dock shortcuts. Theme-only. */
+    private boolean cosyLayout;
     /** Festive skin from the theme (see Festival); applied while it is active today. */
     private Festival festival = Festival.NONE;
     private boolean festive;
@@ -297,6 +301,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             updateGreeting();
             updateRace();
             updateWifiLabel();
+            if (cosyLayout) refreshCosyColours();
             sky.update();
             wallpaperPlayer.update();
             handler.postDelayed(this, MINUTE_MS);
@@ -317,6 +322,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         advancedEffects = cfg.animations && cfg.advancedEffects;
         reducedMotion = cfg.reducedMotion;
         dockRow = cfg.dockRow;
+        cosyLayout = cfg.rightIconRail && WallpaperRotation.ORDER_WEATHER.equals(cfg.wallpaperOrder);
         festival = cfg.festival;
         festive = festival.active(LocalDate.now());
         liveTvPkg = cfg.liveTvPackage;
@@ -373,6 +379,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         showStats = cfg.showStats;
         shamsi = cfg.shamsiDate;
         greetingName = cfg.greetingName;
+        if (cosyLayout) configureCosyHeader();
         if (shamsi) {
             shamsiDate.setVisibility(View.VISIBLE);
             TextView date = findViewById(R.id.date);
@@ -460,6 +467,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // Item height follows the tile size, which follows the columns and the rows that must fit (AppAdapter.tileWidthPx).
             int inner = (r - l) - grid.getPaddingLeft() - grid.getPaddingRight();
             int tileW = AppAdapter.tileWidthPx(inner, h, COLUMNS, rowsBelowDock, cfg.dockTitle, cfg.dockRow, density);
+            if (cosyLayout) tileW = Math.min(tileW, Math.round(148 * density));
             int itemH = AppAdapter.itemHeightPx(AppAdapter.tileHeightPx(tileW), density);
             int dockRow = itemH + (int) (AppAdapter.DOCK_EXTRA_DP * density);   // item height plus DockDecoration offsets
             int gridRows = itemH * rowsBelowDock;
@@ -604,6 +612,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         }
         if (festive) applyFestiveSkin((TextView) btnInputs, (TextView) btnSettings);
+        if (cosyLayout) {
+            wallpaperPlayer.setSceneListener(this::refreshCosyColours);
+            refreshCosyColours();
+        }
 
         // Hide the glass when focus leaves the tiles.
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> {
@@ -707,6 +719,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (showStats) startStats();
         sky.update();
         wallpaperPlayer.start();
+        if (cosyLayout) refreshCosyColours();
         handler.postDelayed(minuteTick, MINUTE_MS);
         if (festive && diya != null) {
             diya.start();
@@ -2191,6 +2204,62 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         position.topMargin = Math.round(28 * density);
         position.setMarginEnd(Math.round(30 * density));
         root.addView(rail, position);
+    }
+
+
+    /** Build a true Cosy Home clock: greeting, giant time, date, live weather, then open landscape. */
+    private void configureCosyHeader() {
+        LinearLayout left = (LinearLayout) clockBlock;
+        TextClock clock = findViewById(R.id.clock);
+        TextClock date = findViewById(R.id.date);
+        LinearLayout timeRow = (LinearLayout) clock.getParent();
+        LinearLayout dateColumn = (LinearLayout) date.getParent();
+
+        // The standard launcher puts the date beside the time. Cosy Home places it below.
+        dateColumn.removeView(date);
+        timeRow.removeView(dateColumn);
+        if (timeRow.getChildCount() > 2) timeRow.getChildAt(2).setVisibility(View.GONE);
+        int insertAt = left.indexOfChild(timeRow) + 1;
+        LinearLayout.LayoutParams dateParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        dateParams.topMargin = Math.round(8 * density);
+        dateParams.leftMargin = Math.round(4 * density);
+        left.addView(date, insertAt, dateParams);
+
+        clock.setTextSize(TypedValue.COMPLEX_UNIT_SP, 145f);
+        date.setTextSize(TypedValue.COMPLEX_UNIT_SP, 25f);
+        date.setAllCaps(false);
+        date.setLetterSpacing(0.015f);
+        weatherSummary.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f);
+        greeting.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+        TextClock ampm = findViewById(R.id.ampm);
+        ampm.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f);
+    }
+
+    /** The actual Cosy scene palette, not the device's dark mode, determines contrast. */
+    private void refreshCosyColours() {
+        if (!cosyLayout || wallpaperPlayer == null) return;
+        boolean dark = wallpaperPlayer.wantsDarkText();
+        int primary = dark ? 0xFF132B35 : 0xFFF4F6FF;
+        int secondary = dark ? 0xFF294754 : 0xFFDDE7F6;
+        greetingColor = secondary;
+        greeting.setTextColor(secondary);
+        ((TextView) findViewById(R.id.clock)).setTextColor(primary);
+        ((TextView) findViewById(R.id.ampm)).setTextColor(secondary);
+        ((TextView) findViewById(R.id.date)).setTextColor(primary);
+        weatherSummary.setTextColor(secondary);
+        weatherSummary.setShadowLayer(dark ? 0f : 2f, 0, 1f, 0x80000000);
+
+        // White focused pills require dark icons; unfocused icons follow day/night.
+        ColorStateList tint = new ColorStateList(
+                new int[][]{new int[]{android.R.attr.state_focused}, new int[]{}},
+                new int[]{0xFF111111, primary});
+        for (int id : new int[]{R.id.btnInputs, R.id.btnWifi, R.id.btnReorder,
+                R.id.btnLibraryTop, R.id.btnSettings}) {
+            TextView button = findViewById(id);
+            button.setCompoundDrawableTintList(tint);
+            button.setTextColor(tint);
+        }
     }
 
     /** Turns a labelled top pill into the round TopButtonIcon shape: no text, the icon centred by even padding. */
