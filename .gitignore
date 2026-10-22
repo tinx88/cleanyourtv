@@ -17,3 +17,11 @@ work/
 *.aab
 launcher/hs_err_pid*.log
 launcher/replay_pid*.log
+
+# Private APK signing material belongs outside the repository.
+*.jks
+*.keystore
+*.p12
+*.pfx
+keystore-password.txt
+keystore-base64.txt

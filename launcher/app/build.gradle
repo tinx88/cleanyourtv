@@ -2,7 +2,28 @@ plugins {
     id 'com.android.application'
 }
 
+// GitHub Actions uses an owner-held PKCS#12 key for installable releases.
+// Ordinary PR/CI previews keep the runner's disposable debug key.
+def familySigningStore = System.getenv('FAMILY_EDITION_SIGNING_KEYSTORE')
+def familySigningPassword = System.getenv('FAMILY_EDITION_SIGNING_PASSWORD')
+def stableSigningReady = familySigningStore && familySigningPassword
+if (System.getenv('FAMILY_EDITION_REQUIRE_STABLE_SIGNING') == 'true' && !stableSigningReady) {
+    throw new GradleException('Stable Family Edition signing requested but keystore/password are missing.')
+}
+
 android {
+    signingConfigs {
+        if (stableSigningReady) {
+            familyEdition {
+                storeFile file(familySigningStore)
+                storePassword familySigningPassword
+                keyAlias 'family-edition'
+                keyPassword familySigningPassword
+                storeType 'PKCS12'
+            }
+        }
+    }
+
     namespace 'com.gathin.tvhome'
     compileSdk 34
 
@@ -21,8 +42,8 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            // Sideloaded over ADB, never published: sign with the debug key so it installs over a debug build.
-            signingConfig signingConfigs.debug
+            // Owner-held key for installable releases; disposable debug key for preview/testing only.
+            signingConfig stableSigningReady ? signingConfigs.familyEdition : signingConfigs.debug
         }
     }
 
