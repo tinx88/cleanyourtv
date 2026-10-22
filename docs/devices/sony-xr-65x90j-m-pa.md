@@ -85,6 +85,21 @@ Verified **after reboot**:
 multi-day stability, and complete daypart wallpaper transitions. Do not
 describe these as passed.
 
+## October 2026 Family Cosy follow-up
+
+Further hands-on operator checks after successive reinstall cycles:
+
+- The animated Cosy Home cottage, day/night scene, upper-right Inputs/Wi-Fi/Apps/Settings icon rail and App Library were working on the TV.
+- The owner could add/remove shortcuts in App Library and reorder Home tiles using Settings long-press > Reorder, with Edit Dock also exposed there.
+- Home role `com.gathin.tvhome` was restored after installation, and the owner confirmed the physical Home button worked again.
+- A separate read-only LAN weather adapter on the FamilyOS Docker network was tested from the Sony: `GET /weather` returned 200 to the Sony client, and simulated rain streaks appeared. The simulated feed was then restored to the genuine FamilyOS BOM condition, confirmed by the adapter source.
+- Original rainy renderer left the sun visible; subsequently built a version with darkened skies and no baked-in sun/moon for clouds/rain/storm.
+- Later enhancement: concise forecast readout beneath the clock, with a configurable suburb label; **this enhancement needs the newer APK installed and independently visually checked**. Do not describe it as already tested on the TV.
+- ADF: weather from a daily forecast category (not current rain radar), temperature from fresh observations. Weather adapter listens on LAN only. Its source and host IP are private and not included in this document.
+- The Docker VM's theme `weather_url` is set locally; the public GitHub theme deliberately has a blank URL. Reinstalling the APK may clear app order, App Library choices and theme, because Actions APKs are independently signed.
+
+**Next device:** the TCL, exact model/firmware not yet inventoried. Do not reuse Sony's HOME role, accessibility service assumptions or package state without an independent, read-only ADB audit. Preserve stock Home/SetupWizard/Cast components until proven safe.
+
 ## Revert just the HOME takeover
 
 With ADB connected and launcherx still enabled:
