@@ -276,6 +276,25 @@
                             android:textAllCaps="true" />
                     </LinearLayout>
 
+                    <!-- Same optional weather summary ID/type as the default layout. -->
+                    <TextView
+                        android:id="@+id/weatherSummary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="7dp"
+                        android:gravity="right"
+                        android:singleLine="true"
+                        android:ellipsize="end"
+                        android:textColor="#EDFFFFFF"
+                        android:textSize="16sp"
+                        android:fontFamily="@font/outfit_medium"
+                        android:shadowColor="#80000000"
+                        android:shadowDx="0"
+                        android:shadowDy="1"
+                        android:shadowRadius="3"
+                        android:importantForAccessibility="no"
+                        android:visibility="gone" />
+
                 </LinearLayout>
             </LinearLayout>
 
