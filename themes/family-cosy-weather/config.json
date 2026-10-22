@@ -18,5 +18,8 @@
   ],
   "right_icon_rail": true,
   "icon_only_buttons": true,
-  "wifi_label_width": 0
+  "wifi_label_width": 0,
+  "greeting_name": "Setiawan Family!",
+  "app_library": true,
+  "library_button": true
 }
