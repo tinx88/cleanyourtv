@@ -22,5 +22,10 @@
   "greeting_name": "Setiawan Family!",
   "app_library": true,
   "library_button": true,
-  "weather_suburb": "Mount Waverley"
+  "weather_suburb": "Mount Waverley",
+  "columns": 6,
+  "dock_title": false,
+  "dock_row": true,
+  "rows_below_dock": 0,
+  "fill_dock": true
 }
