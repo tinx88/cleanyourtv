@@ -155,8 +155,7 @@ final class WallpaperPlayer {
                 cosyScene.setRunning(true);
                 return;
             }
-            cosyScene.setRunning(false);
-            cosyScene.setVisibility(View.GONE);
+            // Keep the cosy scene behind the photo until the first weather image is decoded.
         }
         if (loading || files.isEmpty()) return;
         String previous = preferences.getString("image", "");
@@ -166,7 +165,15 @@ final class WallpaperPlayer {
         if (selected == null || WallpaperRotation.due(changed, System.currentTimeMillis(), interval)) {
             selected = WallpaperRotation.pick(candidates, previous, order, random);
         }
-        if (selected == null || selected.getName().equals(displayed)) return;
+        if (selected == null) return;
+        if (selected.getName().equals(displayed)) {
+            if (cosyScene != null) {
+                image.setVisibility(View.VISIBLE);
+                cosyScene.setRunning(false);
+                cosyScene.setVisibility(View.GONE);
+            }
+            return;
+        }
         File next = selected;
         loading = true;
         decoder.execute(() -> {
@@ -185,6 +192,10 @@ final class WallpaperPlayer {
                 }
                 image.setImageBitmap(bitmap);
                 image.setVisibility(View.VISIBLE);
+                if (cosyScene != null) {
+                    cosyScene.setRunning(false);
+                    cosyScene.setVisibility(View.GONE);
+                }
                 displayed = next.getName();
                 if (!displayed.equals(previous) || changed == 0) {
                     preferences.edit().putString("image", displayed)
