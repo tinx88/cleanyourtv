@@ -15,5 +15,8 @@
     "com.amazon.amazonvideo.livingroom",
     "com.google.android.youtube.tv",
     "com.disney.disneyplus"
-  ]
+  ],
+  "right_icon_rail": true,
+  "icon_only_buttons": true,
+  "wifi_label_width": 0
 }
