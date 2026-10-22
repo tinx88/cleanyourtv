@@ -488,16 +488,23 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // Cold start or column count > 4: the first focus can run before the grid has its final width or
             // padding, leaving the glass at the XML design size until a key is pressed.
             grid.post(this::refitGlass);
+            if (cosyLayout) grid.post(this::refreshCosyDockClip);
         });
 
         // Keep the glass glued to its tile while the grid scrolls.
         grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
+                if (cosyLayout) refreshCosyDockClip();
                 if (!glassShown) return;
                 glassTargetY -= dy;
                 glassScrollShift -= dy;
                 glass.setTranslationY(glass.getTranslationY() - dy);
+            }
+
+            @Override
+            public void onScrollStateChanged(@NonNull RecyclerView rv, int state) {
+                if (cosyLayout && state == RecyclerView.SCROLL_STATE_IDLE) refreshCosyDockClip();
             }
         });
 
@@ -1285,14 +1292,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         View item = (View) card.getParent();
         if (cosyLayout) {
-            if (position < COLUMNS && !reordering && grid.getWidth() > 0) {
-                // Show exactly one dock row at rest. The remaining apps stay in the
-                // RecyclerView and become visible when Down moves focus to them.
-                int edge = Math.min(grid.getHeight(), item.getBottom());
-                grid.setClipBounds(new Rect(0, 0, grid.getWidth(), Math.max(0, edge)));
-            } else {
-                grid.setClipBounds(null);
-            }
+            // Focus can reach the dock while it is still scrolled off-screen. Never
+            // clip using the tile's *current* bottom: it may be negative/zero,
+            // causing the dock to disappear completely on Up from the next row.
+            grid.setClipBounds(null);
         }
         if (dockRow && position < COLUMNS) {
             // Dock: park it at the bottom of the screen and show the top shelf for this app.
@@ -1306,6 +1309,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 else grid.smoothScrollBy(0, dy);
             }
             showHero(position, scroll ? r.top - dy : r.top);
+            if (cosyLayout) refreshCosyDockClip();
         } else {
             // Below the dock (or in a plain grid) the glow follows the tile without the big name; letting it
             // fade out left the grid on plain black.
@@ -1313,6 +1317,42 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // Scroll just enough so the whole glass (not only the tile) is visible.
             revealRect.set(0, -(int) pad * 2, item.getWidth(), item.getHeight() + (int) pad);
             grid.requestChildRectangleOnScreen(item, revealRect, reducedMotion);
+        }
+    }
+
+    /** Keep extra rows below the Cosy dock invisible only when the dock has finished parking.
+     * Android TV focuses a dock tile before scrolling it back from lower rows. Clipping
+     * at that moment made the entire first row disappear (a zero-height clip).
+     * During scroll / reorder / focus on other rows the full grid stays visible.
+     */
+    private void refreshCosyDockClip() {
+        if (!cosyLayout || grid == null) return;
+        int position = focusedTilePosition();
+        if (reordering || position < 0 || position >= COLUMNS || grid.getWidth() <= 0) {
+            if (grid.getClipBounds() != null) grid.setClipBounds(null);
+            return;
+        }
+        RecyclerView.ViewHolder holder = grid.findViewHolderForAdapterPosition(position);
+        if (holder == null || holder.itemView.getHeight() <= 0) {
+            if (grid.getClipBounds() != null) grid.setClipBounds(null);
+            return;
+        }
+        View item = holder.itemView;
+        int decoratedTop = item.getTop() - Math.round(6 * density);
+        // Scroll restoration can be smooth: show the dock throughout its travel,
+        // then reapply the mask on the final frame via onScrolled / SCROLL_STATE_IDLE.
+        if (Math.abs(decoratedTop - grid.getPaddingTop()) > Math.round(8 * density)) {
+            if (grid.getClipBounds() != null) grid.setClipBounds(null);
+            return;
+        }
+        int edge = Math.min(grid.getHeight(), grid.getPaddingTop() + item.getHeight());
+        if (edge <= 0) {
+            if (grid.getClipBounds() != null) grid.setClipBounds(null);
+            return;
+        }
+        Rect current = grid.getClipBounds();
+        if (current == null || current.right != grid.getWidth() || current.bottom != edge) {
+            grid.setClipBounds(new Rect(0, 0, grid.getWidth(), edge));
         }
     }
 
