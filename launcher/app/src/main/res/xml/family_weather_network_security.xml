@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- The Android client itself limits traffic to numeric RFC1918 LAN hosts on port 5056,
+         at /weather, never follows redirects and sends no credentials.
+         The actual host is supplied locally, not committed to the public repository. -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

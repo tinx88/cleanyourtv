@@ -1,0 +1,393 @@
+package com.gathin.tvhome;
+
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.LinearGradient;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RadialGradient;
+import android.graphics.Shader;
+import android.os.SystemClock;
+import android.util.AttributeSet;
+import android.view.View;
+
+/**
+ * Cosy Home scene by Oliver Roberts, MIT licensed. See docs/licenses/COSY-HOME-MIT.txt.
+ * The cosy valley behind the clock: sky, sun or moon, three hills and a cottage.
+ *
+ * Drawn on a 1920x1080 design canvas and scaled to the view. Everything that never moves is
+ * painted once per phase into {@link #still}; each frame only adds the stars, clouds and chimney
+ * smoke on top, at about 25 fps, so the TV's GPU is mostly drawing one bitmap.
+ */
+public class CosySceneView extends View {
+
+    enum Phase { DAWN, DAY, DUSK, NIGHT }
+
+    interface Listener {
+        /** A new still image (and blurred copy) is ready: the phase or the size changed. */
+        void onSceneChanged();
+    }
+
+    private static final float W = 1920f, H = 1080f;
+    private static final long FRAME_MS = 40;
+
+    /** Sky stops, three hill colours, window colour, window glow strength, dark clock text. */
+    private static final class Palette {
+        final int s1, s2, s3, h1, h2, h3, win;
+        final float glow;
+        final boolean darkText;
+
+        Palette(int s1, int s2, int s3, int h1, int h2, int h3, int win, float glow, boolean darkText) {
+            this.s1 = s1;
+            this.s2 = s2;
+            this.s3 = s3;
+            this.h1 = h1;
+            this.h2 = h2;
+            this.h3 = h3;
+            this.win = win;
+            this.glow = glow;
+            this.darkText = darkText;
+        }
+    }
+
+    private static final Palette DAWN = new Palette(0xFF2E3A6B, 0xFFC98A9A, 0xFFF6C99A,
+            0xFF7C6A93, 0xFF54497A, 0xFF2E2A4E, 0xFFFFC27A, 0.5f, false);
+    private static final Palette DAY = new Palette(0xFF4F9CCB, 0xFF93C6E4, 0xFFD8EEF6,
+            0xFF8DB59A, 0xFF64957A, 0xFF3F6E55, 0xFF2B3A40, 0f, true);
+    private static final Palette DUSK = new Palette(0xFF2F2350, 0xFFB4506A, 0xFFF2A65A,
+            0xFF7A4560, 0xFF4E2C4A, 0xFF24162E, 0xFFFFB35C, 0.75f, false);
+    private static final Palette NIGHT = new Palette(0xFF04060E, 0xFF0B1230, 0xFF1A2550,
+            0xFF161D36, 0xFF0E1326, 0xFF070A14, 0xFFFFB35C, 1f, false);
+
+    private static final float[][] STARS = {
+            {180, 90, 2}, {420, 180, 1.6f}, {690, 70, 2.2f}, {930, 150, 1.4f}, {1150, 60, 2},
+            {1320, 130, 1.5f}, {1720, 90, 2.2f}, {1830, 260, 1.4f}, {1080, 300, 1.4f}, {820, 380, 1.2f},
+            {1620, 400, 1.3f}, {560, 330, 1.2f}, {300, 420, 1.1f}, {1240, 240, 1.2f}, {80, 250, 1.5f}};
+    /** Cloud puffs as {cx, cy, rx, ry}. */
+    private static final float[][] CLOUDS = {
+            {420, 260, 130, 34}, {500, 240, 90, 40}, {1000, 380, 160, 30}, {1080, 362, 80, 34}, {1760, 430, 120, 26}};
+
+    private Phase phase = Phase.NIGHT;
+    /** Null: original Cosy Home. Otherwise optional BOM-driven animation. */
+    private String weatherCondition;
+    private Palette pal = NIGHT;
+    private Bitmap still;
+    private Bitmap blurred;
+    private Listener listener;
+    private boolean running;
+    private final long start = SystemClock.uptimeMillis();
+    /** For the still layers. Shaders draw with the paint's alpha, so it must never carry a frame's fade. */
+    private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** For the per-frame stars, clouds and smoke, whose colours carry their own fades. */
+    private final Paint fx = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Path far = new Path(), mid = new Path(), near = new Path();
+
+    public CosySceneView(Context context, AttributeSet attrs) {
+        super(context, attrs);
+        far.moveTo(0, 720);
+        far.cubicTo(240, 640, 420, 660, 640, 700);
+        far.cubicTo(860, 740, 1040, 640, 1280, 650);
+        far.cubicTo(1500, 660, 1700, 720, 1920, 690);
+        closeToBottom(far);
+        mid.moveTo(0, 820);
+        mid.cubicTo(260, 760, 520, 790, 760, 820);
+        mid.cubicTo(1000, 850, 1240, 760, 1500, 770);
+        mid.cubicTo(1700, 778, 1820, 800, 1920, 790);
+        closeToBottom(mid);
+        near.moveTo(0, 940);
+        near.cubicTo(300, 880, 640, 900, 900, 930);
+        near.cubicTo(1160, 960, 1440, 900, 1700, 905);
+        near.cubicTo(1800, 907, 1880, 915, 1920, 920);
+        closeToBottom(near);
+    }
+
+    private static void closeToBottom(Path p) {
+        p.lineTo(W, H);
+        p.lineTo(0, H);
+        p.close();
+    }
+
+    void setListener(Listener l) {
+        listener = l;
+    }
+
+    Phase phase() {
+        return phase;
+    }
+
+    /** Daytime has a light sky, so the clock switches to dark text. */
+    boolean wantsDarkText() {
+        return pal.darkText;
+    }
+
+    /** A small, heavily blurred copy of the still scene, for the glass panels to sample. */
+    Bitmap blurred() {
+        return blurred;
+    }
+
+    void setWeatherCondition(String condition) {
+        String normalised = WeatherWallpaperSelector.validCondition(condition) ? condition : null;
+        if (java.util.Objects.equals(weatherCondition, normalised)) return;
+        weatherCondition = normalised;
+        // The sun/moon and the sky are part of the cached still. Rebuild once on a
+        // forecast change so rain never falls through the original sunny sky.
+        pal = paletteFor(phase, weatherCondition);
+        rebuild();
+    }
+
+    void setPhase(Phase p) {
+        if (p == phase && still != null) return;
+        phase = p;
+        pal = paletteFor(p, weatherCondition);
+        rebuild();
+    }
+
+    /** Keep the original Cosy Home colours when clear/offline; weather mutes the sky without losing its daypart. */
+    private static Palette paletteFor(Phase phase, String condition) {
+        Palette base = phase == Phase.DAWN ? DAWN : phase == Phase.DAY ? DAY
+                : phase == Phase.DUSK ? DUSK : NIGHT;
+        if (!"cloudy".equals(condition) && !"rainy".equals(condition) && !"stormy".equals(condition)) {
+            return base;
+        }
+        boolean storm = "stormy".equals(condition);
+        boolean rain = "rainy".equals(condition);
+        int skyTop = storm ? 0xFF273340 : rain ? 0xFF4A5A67 : 0xFF728896;
+        int skyMid = storm ? 0xFF44515D : rain ? 0xFF778790 : 0xFF9EAFB5;
+        int skyHorizon = storm ? 0xFF68727B : rain ? 0xFFABB6BC : 0xFFC3CCCF;
+        float strength = phase == Phase.NIGHT ? 0.22f
+                : phase == Phase.DUSK ? 0.44f
+                : phase == Phase.DAWN ? 0.60f
+                : storm ? 0.94f : rain ? 0.88f : 0.72f;
+        return new Palette(
+                lerp(base.s1, skyTop, strength),
+                lerp(base.s2, skyMid, strength),
+                lerp(base.s3, skyHorizon, strength),
+                lerp(base.h1, 0xFF687D79, strength * 0.55f),
+                lerp(base.h2, 0xFF465E59, strength * 0.50f),
+                lerp(base.h3, 0xFF263C38, strength * 0.35f),
+                base.win, base.glow, false);
+    }
+
+    /** Frees the full-screen still while an app is in front; the next {@link #setPhase} redraws it. */
+    void release() {
+        still = null;
+    }
+
+    /** Animate only while Home is on screen. */
+    void setRunning(boolean run) {
+        running = run;
+        if (run) invalidate();
+    }
+
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        rebuild();
+    }
+
+    private void rebuild() {
+        int w = getWidth(), h = getHeight();
+        if (w == 0 || h == 0) return;
+        // Full colour (about 8 MB at 1080p): RGB_565 bands visibly in the dark sky and the moon's glow.
+        Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(bmp);
+        c.scale(w / W, h / H);
+        drawStill(c);
+        still = bmp;
+        blurred = null; // Our launcher does not use Cosy Home's frosted app panel.
+        invalidate();
+        if (listener != null) listener.onSceneChanged();
+    }
+
+    // ---- the still layers -------------------------------------------------------------------------
+
+    private void drawStill(Canvas c) {
+        paint.setShader(new LinearGradient(0, 0, 0, H, new int[]{pal.s1, pal.s2, pal.s3},
+                new float[]{0f, 0.6f, 1f}, Shader.TileMode.CLAMP));
+        c.drawRect(0, 0, W, H, paint);
+        paint.setShader(null);
+
+        // When the forecast says cloud/rain/storm, don't bake a bright sun or moon
+        // into the background bitmap. The clouds themselves remain animated.
+        if (!"cloudy".equals(weatherCondition) && !"rainy".equals(weatherCondition)
+                && !"stormy".equals(weatherCondition)) switch (phase) {
+            case DAWN:
+                glowDisc(c, 1180, 660, 68, 0xFFFFE2B4, 0xFFFFD9A0, 0.35f);
+                break;
+            case DAY:
+                glowDisc(c, 1500, 200, 66, 0xFFFFF8E2, 0xFFFFF6D6, 0.55f);
+                break;
+            case DUSK:
+                glowDisc(c, 820, 706, 80, 0xFFFFC27E, 0xFFFFB46B, 0.45f);
+                break;
+            case NIGHT:
+                glowDisc(c, 1480, 230, 54, 0xFFF1EAD8, 0xFFF1EAD8, 0.16f);
+                // The crescent: cover most of the moon with the sky colour at that height.
+                paint.setColor(skyAt(216));
+                c.drawCircle(1502, 216, 48, paint);
+                break;
+        }
+
+        fill(c, far, pal.h1);
+        fill(c, mid, pal.h2);
+
+        if (pal.glow > 0) {
+            int a = Math.round(pal.glow * 0x99);
+            int core = (a << 24) | (pal.win & 0xFFFFFF);
+            paint.setShader(new RadialGradient(1564, 746, 110, core, pal.win & 0xFFFFFF, Shader.TileMode.CLAMP));
+            c.drawCircle(1564, 746, 110, paint);
+            paint.setShader(null);
+        }
+
+        // Cottage, chimney and a few trees on the middle ridge.
+        paint.setColor(pal.h3);
+        c.drawRect(1520, 722, 1610, 778, paint);
+        Path roof = new Path();
+        roof.moveTo(1508, 726);
+        roof.lineTo(1565, 684);
+        roof.lineTo(1622, 726);
+        roof.close();
+        c.drawPath(roof, paint);
+        c.drawRect(1588, 690, 1601, 716, paint);
+        tree(c, 1650, 782, 34, 54);
+        tree(c, 1690, 784, 38, 68);
+        tree(c, 1468, 780, 28, 42);
+        paint.setColor(pal.win);
+        c.drawRect(1540, 738, 1558, 754, paint);
+        c.drawRect(1570, 738, 1588, 754, paint);
+
+        fill(c, near, pal.h3);
+    }
+
+    private void glowDisc(Canvas c, float x, float y, float r, int disc, int glow, float glowAlpha) {
+        int a = Math.round(glowAlpha * 255) << 24;
+        paint.setShader(new RadialGradient(x, y, r * 2.6f, a | (glow & 0xFFFFFF), glow & 0xFFFFFF, Shader.TileMode.CLAMP));
+        c.drawCircle(x, y, r * 2.6f, paint);
+        paint.setShader(null);
+        paint.setColor(disc);
+        c.drawCircle(x, y, r, paint);
+    }
+
+    private void tree(Canvas c, float x, float baseY, float w, float h) {
+        Path p = new Path();
+        p.moveTo(x, baseY);
+        p.lineTo(x + w / 2, baseY - h);
+        p.lineTo(x + w, baseY);
+        p.close();
+        c.drawPath(p, paint);
+    }
+
+    private void fill(Canvas c, Path p, int color) {
+        paint.setColor(color);
+        c.drawPath(p, paint);
+    }
+
+    /** The sky gradient's colour at a design-space height. */
+    private int skyAt(float y) {
+        float t = y / H;
+        return t < 0.6f ? lerp(pal.s1, pal.s2, t / 0.6f) : lerp(pal.s2, pal.s3, (t - 0.6f) / 0.4f);
+    }
+
+    private static int lerp(int a, int b, float t) {
+        return Color.rgb(
+                Math.round(Color.red(a) + (Color.red(b) - Color.red(a)) * t),
+                Math.round(Color.green(a) + (Color.green(b) - Color.green(a)) * t),
+                Math.round(Color.blue(a) + (Color.blue(b) - Color.blue(a)) * t));
+    }
+
+    // ---- each frame -------------------------------------------------------------------------------
+
+    @Override
+    protected void onDraw(Canvas canvas) {
+        if (still == null) return;
+        canvas.drawBitmap(still, 0, 0, null);
+        float seconds = (SystemClock.uptimeMillis() - start) / 1000f;
+        canvas.save();
+        canvas.scale(getWidth() / W, getHeight() / H);
+        boolean wet = "rainy".equals(weatherCondition) || "stormy".equals(weatherCondition);
+        boolean clouds = wet || "cloudy".equals(weatherCondition);
+        if (clouds) {
+            // Sky/hills are already overcast in the cached still, so use only a
+            // light atmospheric tint over the foreground.
+            fx.setColor(Color.argb(wet ? 30 : 18, 14, 24, 44));
+            canvas.drawRect(0, 0, W, H, fx);
+        }
+        if (!clouds && (phase == Phase.NIGHT || phase == Phase.DUSK)) {
+            drawStars(canvas, seconds, phase == Phase.NIGHT ? 1f : 0.35f);
+        }
+        if (clouds || phase == Phase.DAWN || phase == Phase.DAY) drawClouds(canvas, seconds);
+        if (wet) drawRain(canvas, seconds, "stormy".equals(weatherCondition));
+        if ("stormy".equals(weatherCondition)) drawLightning(canvas, seconds);
+        if (phase != Phase.DAY) drawSmoke(canvas, seconds);
+        canvas.restore();
+        if (running) postInvalidateDelayed(FRAME_MS);
+    }
+
+    private void drawStars(Canvas c, float s, float strength) {
+        for (int i = 0; i < STARS.length; i++) {
+            float[] st = STARS[i];
+            // Every other star twinkles, each on its own slow period.
+            float twinkle = i % 2 == 0 ? 1f : 0.65f + 0.35f * (float) Math.sin(s * (0.9f + i * 0.13f) + i);
+            fx.setColor(Color.argb(Math.round(240 * strength * twinkle), 255, 255, 255));
+            c.drawCircle(st[0], st[1], st[2], fx);
+        }
+    }
+
+    private void drawClouds(Canvas c, float s) {
+        // Drift 230 px one way over 70 s, then back: the mockup's ease-in-out alternate.
+        float t = (float) (0.5 - 0.5 * Math.cos(Math.PI * s / 70.0));
+        float dx = -90 + 230 * t;
+        boolean storm = "stormy".equals(weatherCondition);
+        boolean wet = storm || "rainy".equals(weatherCondition);
+        boolean cloudy = "cloudy".equals(weatherCondition);
+        // Use slate-grey storm clouds instead of sunny white puffs when wet.
+        if (storm) fx.setColor(Color.argb(170, 126, 142, 154));
+        else if (wet) fx.setColor(Color.argb(150, 158, 173, 185));
+        else if (cloudy) fx.setColor(Color.argb(155, 201, 210, 218));
+        else fx.setColor(Color.argb(phase == Phase.DAY ? 150 : 120, 255, 255, 255));
+        for (float[] cl : CLOUDS) {
+            c.drawOval(cl[0] - cl[2] + dx, cl[1] - cl[3], cl[0] + cl[2] + dx, cl[1] + cl[3], fx);
+        }
+    }
+
+    /** Sparse, deterministic wind-blown rain. No per-frame allocations or background task. */
+    private void drawRain(Canvas c, float seconds, boolean heavy) {
+        int count = heavy ? 116 : 70;
+        fx.setStrokeWidth(heavy ? 2.1f : 1.7f);
+        for (int i = 0; i < count; i++) {
+            float x = (i * 173 + 31) % 2010 - 40;
+            float y = (i * 269 + seconds * (heavy ? 970f : 660f)) % 1180 - 80;
+            float length = (heavy ? 29 : 20) + (i % 7);
+            fx.setColor(Color.argb(heavy ? 125 : 93, 205, 223, 244));
+            c.drawLine(x, y, x - (heavy ? 10 : 6), y + length, fx);
+        }
+    }
+
+    /** Distant, subtle bolt, about once every 31 seconds. No strobe/flashing UI. */
+    private void drawLightning(Canvas c, float seconds) {
+        float cycle = seconds % 31f;
+        if (cycle > 0.23f) return;
+        fx.setColor(Color.argb(cycle < 0.10f ? 27 : 13, 234, 241, 255));
+        c.drawRect(0, 0, W, H, fx);
+        fx.setColor(Color.argb(cycle < 0.10f ? 135 : 65, 235, 242, 255));
+        fx.setStrokeWidth(5f);
+        Path bolt = new Path();
+        bolt.moveTo(1240, 135);
+        bolt.lineTo(1190, 260);
+        bolt.lineTo(1240, 265);
+        bolt.lineTo(1160, 415);
+        c.drawPath(bolt, fx);
+    }
+
+    private void drawSmoke(Canvas c, float s) {
+        for (int i = 0; i < 3; i++) {
+            float t = ((s + i * 2.33f) % 7f) / 7f;              // 0..1 over a 7 s rise
+            float alpha = t < 0.2f ? t / 0.2f * 0.45f : 0.45f * (1 - (t - 0.2f) / 0.8f);
+            float r = 10 * (0.6f + 1.1f * t);
+            fx.setColor(Color.argb(Math.round(alpha * 255), 0xD8, 0xD2, 0xE2));
+            c.drawCircle(1595 + 34 * t, 680 - 130 * t, r, fx);
+        }
+    }
+}

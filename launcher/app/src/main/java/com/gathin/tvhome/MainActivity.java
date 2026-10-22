@@ -2,6 +2,7 @@ package com.gathin.tvhome;
 
 import android.animation.ArgbEvaluator;
 import android.animation.ValueAnimator;
+import android.content.res.ColorStateList;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.ActivityNotFoundException;
@@ -61,6 +62,8 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
+import android.widget.TextClock;
+import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -142,8 +145,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean animations;
     private boolean advancedEffects;
     private TextView greeting;
+    private TextView weatherSummary;
+    private String weatherSuburb = "";
     private View clockBlock;
     private View btnInputs;
+    /** Optional compact vertical button rail used by the Family Cosy theme. */
+    private boolean rightIconRail;
     private TextView btnWifi;
     /** The network pill's icon as last set, so a refresh that changes nothing does not lay the top bar out again. */
     private int wifiIcon;
@@ -186,6 +193,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean reducedMotion;
     /** config.xml dock_row: the first row is a separate dock (band, parked low, top shelf) rather than plain grid. */
     private boolean dockRow;
+    /** Full-screen Cosy Home clock with six compact dock shortcuts. Theme-only. */
+    private boolean cosyLayout;
     /** Festive skin from the theme (see Festival); applied while it is active today. */
     private Festival festival = Festival.NONE;
     private boolean festive;
@@ -292,6 +301,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             updateGreeting();
             updateRace();
             updateWifiLabel();
+            if (cosyLayout) refreshCosyColours();
             sky.update();
             wallpaperPlayer.update();
             handler.postDelayed(this, MINUTE_MS);
@@ -312,6 +322,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         advancedEffects = cfg.animations && cfg.advancedEffects;
         reducedMotion = cfg.reducedMotion;
         dockRow = cfg.dockRow;
+        cosyLayout = cfg.rightIconRail && WallpaperRotation.ORDER_WEATHER.equals(cfg.wallpaperOrder);
         festival = cfg.festival;
         festive = festival.active(LocalDate.now());
         liveTvPkg = cfg.liveTvPackage;
@@ -354,6 +365,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         greeting = findViewById(R.id.greeting);
         clockBlock = findViewById(R.id.leftBlock);
         greetingColor = greeting.getCurrentTextColor();
+        weatherSummary = findViewById(R.id.weatherSummary);
+        weatherSuburb = cfg.weatherSuburb;
+        wallpaperPlayer.setWeatherListener(this::showWeatherSummary);
         btnWifi = findViewById(R.id.btnWifi);
         shamsiDate = findViewById(R.id.shamsiDate);
         stats = findViewById(R.id.stats);
@@ -365,6 +379,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         showStats = cfg.showStats;
         shamsi = cfg.shamsiDate;
         greetingName = cfg.greetingName;
+        if (cosyLayout) configureCosyHeader();
         if (shamsi) {
             shamsiDate.setVisibility(View.VISIBLE);
             TextView date = findViewById(R.id.date);
@@ -431,7 +446,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             public void onChildViewDetachedFromWindow(@NonNull View v) {
             }
         });
-        if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density, cinematic, cfg.alwaysShowNames));
+        if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density, cinematic, cfg.alwaysShowNames, cosyLayout));
         if (animations) {
             int enterAnim = reducedMotion ? R.anim.tile_enter_reduced : R.anim.tile_enter;
             float enterDelay = reducedMotion ? 0f : 0.06f;
@@ -452,6 +467,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // Item height follows the tile size, which follows the columns and the rows that must fit (AppAdapter.tileWidthPx).
             int inner = (r - l) - grid.getPaddingLeft() - grid.getPaddingRight();
             int tileW = AppAdapter.tileWidthPx(inner, h, COLUMNS, rowsBelowDock, cfg.dockTitle, cfg.dockRow, density);
+            if (cosyLayout) tileW = Math.min(tileW, Math.round(148 * density));
             int itemH = AppAdapter.itemHeightPx(AppAdapter.tileHeightPx(tileW), density);
             int dockRow = itemH + (int) (AppAdapter.DOCK_EXTRA_DP * density);   // item height plus DockDecoration offsets
             int gridRows = itemH * rowsBelowDock;
@@ -459,6 +475,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // even when the theme requests an extra visible row below the dock.
             int shelfClearance = cfg.appLibrary ? hero.getMeasuredHeight() + (int) (40 * density) : 0;
             int want = Math.max(shelfClearance, h - dockRow - gridRows - (int) (AppAdapter.BOTTOM_ROOM_DP * density));
+            // The Cosy scene has no app title: settle its six shortcuts lower, above the screen's safe edge.
+            if (cosyLayout) want += Math.round(35 * density);
             // Where the rows cannot fit even at the smallest tile (3 rows with the title on), the title keeps its
             // room above the dock and the last rows run off the bottom instead of the title drawing over the clock.
             if (MainActivity.this.dockRow && cfg.dockTitle && rowsBelowDock > 0) want = Math.max(want, (int) (AppAdapter.TITLE_ROOM_DP * density));
@@ -470,16 +488,28 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // Cold start or column count > 4: the first focus can run before the grid has its final width or
             // padding, leaving the glass at the XML design size until a key is pressed.
             grid.post(this::refitGlass);
+            if (cosyLayout) grid.post(this::refreshCosyDockClip);
         });
 
         // Keep the glass glued to its tile while the grid scrolls.
         grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
+                if (cosyLayout) refreshCosyDockClip();
                 if (!glassShown) return;
                 glassTargetY -= dy;
                 glassScrollShift -= dy;
                 glass.setTranslationY(glass.getTranslationY() - dy);
+            }
+
+            @Override
+            public void onScrollStateChanged(@NonNull RecyclerView rv, int state) {
+                if (cosyLayout && state == RecyclerView.SCROLL_STATE_IDLE) {
+                    refreshCosyDockClip();
+                    // Cold-start layout can move the dock after focus was first drawn.
+                    // Re-measure once the RecyclerView has finished repositioning it.
+                    rv.post(MainActivity.this::refitGlass);
+                }
             }
         });
 
@@ -527,12 +557,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             libraryFromTopBar = true;   // closing it goes back to this button, not to the pill after the last row
         });
         btnLibraryTop.setVisibility(cfg.libraryButton && cfg.appLibrary ? View.VISIBLE : View.GONE);
-        iconOnlyButtons = cfg.iconOnlyButtons;
-        wifiIconOnly = iconOnlyButtons && cfg.wifiLabelWidth <= 0;
+        rightIconRail = cfg.rightIconRail;
+        iconOnlyButtons = cfg.iconOnlyButtons || rightIconRail;
+        wifiIconOnly = iconOnlyButtons && (rightIconRail || cfg.wifiLabelWidth <= 0);
         if (iconOnlyButtons) {
-            if (cfg.wifiLabelWidth > 0) btnWifi.setMaxWidth(Math.round(cfg.wifiLabelWidth * density));
-            else makeIconOnly(btnWifi);
+            if (!rightIconRail && cfg.wifiLabelWidth > 0) {
+                btnWifi.setMaxWidth(Math.round(cfg.wifiLabelWidth * density));
+            } else {
+                makeIconOnly(btnWifi);
+            }
             makeIconOnly((TextView) btnSettings);
+        }
+        if (rightIconRail) {
+            makeIconOnly((TextView) btnInputs);
+            moveTopButtonsToRightRail();
         }
         btnSettings.setOnLongClickListener(v -> {
             showSettingsMenu();
@@ -544,6 +582,25 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         boolean rtlMenuBar = getResources().getBoolean(R.bool.rtl_menu_bar);
         View.OnKeyListener pillKeys = (v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (rightIconRail) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    focusTile(lastFocused % COLUMNS);
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return true;
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    LinearLayout rail = findViewById(R.id.topButtons);
+                    int step = keyCode == KeyEvent.KEYCODE_DPAD_UP ? -1 : 1;
+                    for (int i = rail.indexOfChild(v) + step; i >= 0 && i < rail.getChildCount(); i += step) {
+                        View candidate = rail.getChildAt(i);
+                        if (candidate.getVisibility() == View.VISIBLE && candidate.isFocusable()) {
+                            candidate.requestFocus();
+                            break;
+                        }
+                    }
+                    return true;
+                }
+            }
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                 // Back to the dock tile Up came from, not wherever the focus finder lands.
@@ -569,6 +626,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         }
         if (festive) applyFestiveSkin((TextView) btnInputs, (TextView) btnSettings);
+        if (cosyLayout) {
+            wallpaperPlayer.setSceneListener(this::refreshCosyColours);
+            refreshCosyColours();
+        }
 
         // Hide the glass when focus leaves the tiles.
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> {
@@ -672,6 +733,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (showStats) startStats();
         sky.update();
         wallpaperPlayer.start();
+        if (cosyLayout) refreshCosyColours();
         handler.postDelayed(minuteTick, MINUTE_MS);
         if (festive && diya != null) {
             diya.start();
@@ -890,6 +952,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (handleSettingsKey(event)) return true;
+        // The cosy home masks rows below the dock. Unmask BEFORE focus search on Down,
+        // so Android TV can discover the next row and scroll into it normally.
+        if (cosyLayout && event.getAction() == KeyEvent.ACTION_DOWN
+                && event.getKeyCode() == KeyEvent.KEYCODE_DPAD_DOWN) {
+            int focused = focusedTilePosition();
+            if (focused >= 0 && focused < COLUMNS) grid.setClipBounds(null);
+        }
         if (!reordering) return super.dispatchKeyEvent(event);
         if (dockEditing) return dispatchDockEdit(event);
         boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
@@ -951,6 +1020,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         adapter.setReordering(true);
         if (adapter.hasEmptySlots()) reloadTiles();   // every position must hold a tile that can move
         reordering = true;
+        if (cosyLayout) grid.setClipBounds(null);
         orderAtStart = adapter.movableKeys();
         glass.setAccent(REORDER_ACCENT);
         btnReorder.setActivated(true);
@@ -1056,6 +1126,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Ends the mode and saves the order if it changed since the mode started. */
     private void endReorder() {
         if (!reordering) return;
+        if (cosyLayout) grid.setClipBounds(null);
         dockEditing = false;
         dockEditSlot = -1;
         drop();
@@ -1225,6 +1296,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             springY.animateToFinalPosition(y - glassScrollShift);
         }
         View item = (View) card.getParent();
+        if (cosyLayout) {
+            // Focus can reach the dock while it is still scrolled off-screen. Never
+            // clip using the tile's *current* bottom: it may be negative/zero,
+            // causing the dock to disappear completely on Up from the next row.
+            grid.setClipBounds(null);
+        }
         if (dockRow && position < COLUMNS) {
             // Dock: park it at the bottom of the screen and show the top shelf for this app.
             int decoratedTop = item.getTop() - (int) (6 * density);
@@ -1237,6 +1314,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 else grid.smoothScrollBy(0, dy);
             }
             showHero(position, scroll ? r.top - dy : r.top);
+            if (cosyLayout) refreshCosyDockClip();
         } else {
             // Below the dock (or in a plain grid) the glow follows the tile without the big name; letting it
             // fade out left the grid on plain black.
@@ -1247,7 +1325,47 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
     }
 
-    /** Refits the glass to the focused holder once the grid layout and tile dimensions settle. */
+    /** Keep extra rows below the Cosy dock invisible only when the dock has finished parking.
+     * Android TV focuses a dock tile before scrolling it back from lower rows. Clipping
+     * at that moment made the entire first row disappear (a zero-height clip).
+     * During scroll / reorder / focus on other rows the full grid stays visible.
+     */
+    private void refreshCosyDockClip() {
+        if (!cosyLayout || grid == null) return;
+        int position = focusedTilePosition();
+        if (reordering || position < 0 || position >= COLUMNS || grid.getWidth() <= 0) {
+            if (grid.getClipBounds() != null) grid.setClipBounds(null);
+            return;
+        }
+        RecyclerView.ViewHolder holder = grid.findViewHolderForAdapterPosition(position);
+        if (holder == null || holder.itemView.getHeight() <= 0) {
+            if (grid.getClipBounds() != null) grid.setClipBounds(null);
+            return;
+        }
+        View item = holder.itemView;
+        int decoratedTop = item.getTop() - Math.round(6 * density);
+        // Scroll restoration can be smooth: show the dock throughout its travel,
+        // then reapply the mask on the final frame via onScrolled / SCROLL_STATE_IDLE.
+        if (Math.abs(decoratedTop - grid.getPaddingTop()) > Math.round(8 * density)) {
+            if (grid.getClipBounds() != null) grid.setClipBounds(null);
+            return;
+        }
+        int edge = Math.min(grid.getHeight(), grid.getPaddingTop() + item.getHeight());
+        if (edge <= 0) {
+            if (grid.getClipBounds() != null) grid.setClipBounds(null);
+            return;
+        }
+        Rect current = grid.getClipBounds();
+        if (current == null || current.right != grid.getWidth() || current.bottom != edge) {
+            grid.setClipBounds(new Rect(0, 0, grid.getWidth(), edge));
+        }
+    }
+
+    /** Refits the glass after a size OR position change. At a cold boot, the dock's
+     * bottom padding can move its tiles after focus was drawn, without changing
+     * their width. Comparing only width/height left the outline floating above
+     * Prime Video until another app was opened and Home resumed.
+     */
     private void refitGlass() {
         if (isDestroyed() || adapter.appCount() == 0 || libraryFocusPending) return;
         int pos = Math.max(0, Math.min(lastFocused, adapter.appCount() - 1));
@@ -1260,6 +1378,24 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int h = (int) (card.getHeight() * scale + 2 * pad);
         if (!glassShown || card.getWidth() != glassCardW || glass.getWidth() != w || glass.getHeight() != h) {
             onTileFocused(pos, card);
+        }
+        if (!cosyLayout || !glassShown || grid.getScrollState() != RecyclerView.SCROLL_STATE_IDLE) return;
+        // Work from the final card position in root coordinates, not the initial
+        // focus position computed before the grid's dynamic bottom-dock padding.
+        Rect actual = new Rect(0, 0, card.getWidth(), card.getHeight());
+        root.offsetDescendantRectToMyCoords(card, actual);
+        float x = actual.exactCenterX() - (card.getWidth() * scale + 2 * pad) / 2f;
+        float y = actual.exactCenterY() - (card.getHeight() * scale + 2 * pad) / 2f
+                - (advancedEffects ? 4f * density : 0f);
+        if (Math.abs(glass.getTranslationX() - x) > 2f * density
+                || Math.abs(glass.getTranslationY() - y) > 2f * density) {
+            springX.cancel();
+            springY.cancel();
+            glassScrollShift = 0f;
+            glassTargetX = x;
+            glassTargetY = y;
+            glass.setTranslationX(x);
+            glass.setTranslationY(y);
         }
     }
 
@@ -1766,6 +1902,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 focusLibrary();
                 return true;
             }
+            // The right rail is reached naturally by pressing Right on the dock's last app.
+            if (rightIconRail && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && position < COLUMNS
+                    && position == Math.min(count, adapter.dockFilled()) - 1) {
+                View first = btnInputs.getVisibility() == View.VISIBLE ? btnInputs : firstTopButton();
+                first.requestFocus();
+                return true;
+            }
             // In the dock, the last app is the row's end: the empty slots after it take no focus.
             int rowCount = position < COLUMNS ? Math.min(count, adapter.dockFilled()) : count;
             return GridNavigation.atHorizontalEdge(position, rowCount, COLUMNS,
@@ -1987,6 +2130,27 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         racePanel.setVisibility(View.VISIBLE);
     }
 
+    /** Show only actual bridge data. No stale temperature or invented offline label. */
+    private void showWeatherSummary(WeatherFeed.WeatherData data) {
+        if (weatherSummary == null) return;
+        if (data == null || data.condition == null || data.condition.isEmpty()) {
+            weatherSummary.setText(null);
+            weatherSummary.setVisibility(View.GONE);
+            return;
+        }
+        StringBuilder label = new StringBuilder();
+        if (!weatherSuburb.isEmpty()) label.append(weatherSuburb);
+        if (data.temperature != null) {
+            if (label.length() > 0) label.append("  ·  ");
+            label.append(String.format(Locale.US, "%.1f°C", data.temperature));
+        }
+        if (label.length() > 0) label.append("  ·  ");
+        label.append(Character.toUpperCase(data.condition.charAt(0)))
+                .append(data.condition.substring(1));
+        weatherSummary.setText(label.toString());
+        weatherSummary.setVisibility(View.VISIBLE);
+    }
+
     private void refreshPillsAfterNextDraw() {
         root.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
             @Override
@@ -2096,6 +2260,95 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private View btnLibraryTop;
     /** The open library came from that button: closing it returns there instead of scrolling to the grid's end. */
     private boolean libraryFromTopBar;
+
+    /**
+     * Move only the existing button views: click/long-click handlers, Wi-Fi updates and
+     * popup anchors keep their identities. The top header no longer reserves horizontal
+     * room for the buttons, leaving the sun visible above the dock.
+     */
+    private void moveTopButtonsToRightRail() {
+        LinearLayout rail = findViewById(R.id.topButtons);
+        ViewGroup originalParent = (ViewGroup) rail.getParent();
+        originalParent.removeView(rail);
+
+        RelativeLayout.LayoutParams header = (RelativeLayout.LayoutParams) clockBlock.getLayoutParams();
+        header.removeRule(RelativeLayout.START_OF);
+        header.setMarginEnd(0);
+        clockBlock.setLayoutParams(header);
+
+        rail.setOrientation(LinearLayout.VERTICAL);
+        rail.setGravity(Gravity.CENTER_HORIZONTAL);
+        rail.setClipChildren(false);
+        rail.setClipToPadding(false);
+        int buttonSize = Math.round(42 * density);
+        for (int i = 0; i < rail.getChildCount(); i++) {
+            LinearLayout.LayoutParams item = new LinearLayout.LayoutParams(buttonSize, buttonSize);
+            item.bottomMargin = Math.round(12 * density);
+            rail.getChildAt(i).setLayoutParams(item);
+        }
+        FrameLayout.LayoutParams position = new FrameLayout.LayoutParams(
+                buttonSize, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END | Gravity.TOP);
+        // Keep all four controls above the hero/dock area, in the TV safe zone.
+        position.topMargin = Math.round(28 * density);
+        position.setMarginEnd(Math.round(30 * density));
+        root.addView(rail, position);
+    }
+
+
+    /** Build a true Cosy Home clock: greeting, giant time, date, live weather, then open landscape. */
+    private void configureCosyHeader() {
+        LinearLayout left = (LinearLayout) clockBlock;
+        TextClock clock = findViewById(R.id.clock);
+        TextClock date = findViewById(R.id.date);
+        LinearLayout timeRow = (LinearLayout) clock.getParent();
+        LinearLayout dateColumn = (LinearLayout) date.getParent();
+
+        // The standard launcher puts the date beside the time. Cosy Home places it below.
+        dateColumn.removeView(date);
+        timeRow.removeView(dateColumn);
+        if (timeRow.getChildCount() > 2) timeRow.getChildAt(2).setVisibility(View.GONE);
+        int insertAt = left.indexOfChild(timeRow) + 1;
+        LinearLayout.LayoutParams dateParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        dateParams.topMargin = Math.round(8 * density);
+        dateParams.leftMargin = Math.round(4 * density);
+        left.addView(date, insertAt, dateParams);
+
+        clock.setTextSize(TypedValue.COMPLEX_UNIT_SP, 145f);
+        date.setTextSize(TypedValue.COMPLEX_UNIT_SP, 25f);
+        date.setAllCaps(false);
+        date.setLetterSpacing(0.015f);
+        weatherSummary.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f);
+        greeting.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
+        TextClock ampm = findViewById(R.id.ampm);
+        ampm.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f);
+    }
+
+    /** The actual Cosy scene palette, not the device's dark mode, determines contrast. */
+    private void refreshCosyColours() {
+        if (!cosyLayout || wallpaperPlayer == null) return;
+        boolean dark = wallpaperPlayer.wantsDarkText();
+        int primary = dark ? 0xFF132B35 : 0xFFF4F6FF;
+        int secondary = dark ? 0xFF294754 : 0xFFDDE7F6;
+        greetingColor = secondary;
+        greeting.setTextColor(secondary);
+        ((TextView) findViewById(R.id.clock)).setTextColor(primary);
+        ((TextView) findViewById(R.id.ampm)).setTextColor(secondary);
+        ((TextView) findViewById(R.id.date)).setTextColor(primary);
+        weatherSummary.setTextColor(secondary);
+        weatherSummary.setShadowLayer(dark ? 0f : 2f, 0, 1f, 0x80000000);
+
+        // White focused pills require dark icons; unfocused icons follow day/night.
+        ColorStateList tint = new ColorStateList(
+                new int[][]{new int[]{android.R.attr.state_focused}, new int[]{}},
+                new int[]{0xFF111111, primary});
+        for (int id : new int[]{R.id.btnInputs, R.id.btnWifi, R.id.btnReorder,
+                R.id.btnLibraryTop, R.id.btnSettings}) {
+            TextView button = findViewById(id);
+            button.setCompoundDrawableTintList(tint);
+            button.setTextColor(tint);
+        }
+    }
 
     /** Turns a labelled top pill into the round TopButtonIcon shape: no text, the icon centred by even padding. */
     private void makeIconOnly(TextView pill) {
@@ -2418,7 +2671,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         panel.setPivotY(0f);
         panel.setScaleY(0.92f);
         panel.setTranslationY(-8 * density);
-        popup.showAsDropDown(anchor, 0, (int) (10 * density), gravity);
+        popup.showAsDropDown(anchor, 0, (int) (10 * density), rightIconRail ? Gravity.END : gravity);
         panel.animate().alpha(1f).scaleY(1f).translationY(0f).setDuration(220)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
     }

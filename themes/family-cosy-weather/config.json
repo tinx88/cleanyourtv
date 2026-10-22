@@ -1,0 +1,31 @@
+{
+  "wallpaper": true,
+  "wallpaper_order": "weather",
+  "weather_url": "",
+  "wallpaper_dim": 0,
+  "wallpaper_true_color": true,
+  "wallpaper_rotation_minutes": 0,
+  "sky_intensity": 0,
+  "ambient_glow": false,
+  "live_tv_package": "com.sony.dtv.tvx",
+  "hidden_apps": [
+    "com.sony.dtv.tvx"
+  ],
+  "dock_apps": [
+    "com.amazon.amazonvideo.livingroom",
+    "com.google.android.youtube.tv",
+    "com.disney.disneyplus"
+  ],
+  "right_icon_rail": true,
+  "icon_only_buttons": true,
+  "wifi_label_width": 0,
+  "greeting_name": "Setiawan Family!",
+  "app_library": true,
+  "library_button": true,
+  "weather_suburb": "Mount Waverley",
+  "columns": 6,
+  "dock_title": false,
+  "dock_row": true,
+  "rows_below_dock": 0,
+  "fill_dock": true
+}
