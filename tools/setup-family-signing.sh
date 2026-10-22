@@ -13,6 +13,10 @@ BASE64="$SIGNING_DIR/keystore-base64.txt"
 mkdir -p "$SIGNING_DIR"
 chmod 700 "$SIGNING_DIR"
 if [[ -e "$KEYSTORE" || -e "$PASSWORD" || -e "$BASE64" ]]; then
+  if [[ ! -s "$KEYSTORE" || ! -s "$PASSWORD" || ! -s "$BASE64" ]]; then
+    echo "Incomplete signing files in $SIGNING_DIR; no key will be overwritten." >&2
+    exit 1
+  fi
   echo "Signing material already exists in $SIGNING_DIR. Not rotating the signing identity."
   echo 'Back it up securely; reuse these exact files for future builds.'
   exit 0
@@ -20,7 +24,7 @@ fi
 
 TMP=$(mktemp -d "$SIGNING_DIR/.generating.XXXXXXXX")
 trap 'rm -rf "$TMP"' EXIT
-openssl rand -hex 32 > "$TMP/keystore-password.txt"
+openssl rand -hex 32 | tr -d '\n' > "$TMP/keystore-password.txt"
 openssl req -x509 -newkey rsa:3072 -sha256 -days 36500 -nodes -subj '/CN=Family Edition Launcher' -keyout "$TMP/private.pem" -out "$TMP/certificate.pem" >/dev/null 2>&1
 openssl pkcs12 -export -inkey "$TMP/private.pem" -in "$TMP/certificate.pem" -name family-edition -out "$TMP/family-edition-release.p12" -passout "file:$TMP/keystore-password.txt"
 openssl pkcs12 -in "$TMP/family-edition-release.p12" -info -noout -passin "file:$TMP/keystore-password.txt" >/dev/null 2>&1
