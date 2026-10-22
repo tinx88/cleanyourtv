@@ -29,10 +29,11 @@ LAN adapter for the existing environment bridge. Its sole `GET /weather`
 route exposes a non-sensitive summary (condition, temperature and timestamp),
 **not** FamilyOS login details, tokens, UV/pollen, or user records.
 
-- The feed must be reachable at `http://192.168.0.21:5056/weather` from the TV
-  for the sample theme and Android Network Security Config as committed. If the
-  Docker VM LAN address changes, update both the URL in the theme and the
-  narrow cleartext allowlist in `family_weather_network_security.xml`.
+- On the Docker VM's local checkout, set the `weather_url` key in
+  `themes/family-cosy-weather/config.json` to
+  `http://<DOCKER_VM_LAN_IP>:5056/weather`, then apply the theme. Leave the
+  value blank in the public GitHub repo. The app only fetches private numeric
+  IPv4 addresses on port 5056 and does not follow redirects.
 - Keep port 5056 local to the LAN, do not forward it from the router, and limit
   access to the Sony's IP in the bridge config / firewall.
 - Do **not** expose FamilyOS's authenticated `/environment/home` to the TV.
