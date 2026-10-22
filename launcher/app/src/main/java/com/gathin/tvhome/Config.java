@@ -120,6 +120,8 @@ final class Config {
     final String wallpaperOrder;
     /** Optional read-only LAN weather feed. Empty means offline images only. */
     final String weatherUrl;
+    /** Display-only suburb for the concise weather line; set by the theme, no location permission needed. */
+    final String weatherSuburb;
     /** Whether the overlay file was present and parsed. */
     final boolean overlayApplied;
     /** Festive skin from a theme (festival, festival_until, greeting, accent_color); {@link Festival#NONE} if none. */
@@ -140,7 +142,7 @@ final class Config {
                    boolean shamsiDate, String greetingName, boolean moduleCards, boolean reducedMotion, boolean dockTitle, boolean dockRow, boolean reorderButton, boolean showNetworkPill, boolean iconOnlyButtons, boolean rightIconRail, boolean libraryButton, int wifiLabelWidth, boolean alwaysShowNames, boolean wallpaperTrueColor, String vpnApp,
                    boolean showHomeSettingsShortcut, boolean showStats, boolean appLibrary, int backgroundColor, int skyIntensity,
                    int[] settingsKeycodes, boolean settingsKeyPanel, boolean wallpaperEnabled, File wallpaper, List<File> wallpapers,
-                   int wallpaperRotationMinutes, int wallpaperDim, String wallpaperOrder, String weatherUrl, boolean overlayApplied,
+                   int wallpaperRotationMinutes, int wallpaperDim, String wallpaperOrder, String weatherUrl, String weatherSuburb, boolean overlayApplied,
                    Festival festival, int[] inputKeycodes, List<String> appKeys,
                    List<RaceWeekend.Race> raceCalendar, boolean cinematicHome, boolean ambientGlow, int homeIdleClockMinutes) {
         this.inputKeycodes = inputKeycodes;
@@ -189,6 +191,7 @@ final class Config {
         this.wallpaperDim = wallpaperDim;
         this.wallpaperOrder = wallpaperOrder;
         this.weatherUrl = weatherUrl;
+        this.weatherSuburb = weatherSuburb;
         this.overlayApplied = overlayApplied;
         this.festival = festival;
         this.raceCalendar = Collections.unmodifiableList(raceCalendar);
@@ -320,6 +323,7 @@ final class Config {
         // An unknown order must not silently change how an existing collection rotates.
         if (!WallpaperRotation.validOrder(wallpaperOrder)) wallpaperOrder = WallpaperRotation.ORDER_SHUFFLE;
         String weatherUrl = json == null ? "" : string(json, "weather_url", "");
+        String weatherSuburb = json == null ? "" : string(json, "weather_suburb", "").trim();
         List<File> wallpapers = new ArrayList<>();
         if (rotationMinutes > 0 && dir != null && wallpaperEnabled) {
             wallpapers.addAll(WallpaperRotation.images(new File(dir, "wallpapers")));
@@ -354,7 +358,7 @@ final class Config {
                 Math.max(1, columns), Math.max(0, rowsBelow), animations, advancedEffects,
                 shamsi, greetingName, moduleCards, reducedMotion, dockTitle, dockRow, reorderButton, showNetworkPill, iconOnlyButtons, rightIconRail, libraryButton, wifiLabelWidth, alwaysShowNames, wallpaperTrueColor, vpn, homeSettings, showStats, library, background,
                 Math.max(0, Math.min(100, skyIntensity)), settingsKeycodes, settingsKeyPanel, wallpaperEnabled, wallpaper,
-                wallpapers, rotationMinutes, wallpaperDim, wallpaperOrder, weatherUrl, applied,
+                wallpapers, rotationMinutes, wallpaperDim, wallpaperOrder, weatherUrl, weatherSuburb, applied,
                 festival, inputKeycodes, appKeys, json == null ? Collections.emptyList() : raceCalendar(json), cinematic, ambientGlow,
                 Math.max(0, idleClockMinutes));
     }
