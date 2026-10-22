@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false" />
-    <!-- Weather is non-sensitive, served by our local Docker VM; no public HTTP access. -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">192.168.0.21</domain>
-    </domain-config>
+    <!-- The Android client itself limits traffic to numeric RFC1918 LAN hosts on port 5056,
+         at /weather, never follows redirects and sends no credentials.
+         The actual host is supplied locally, not committed to the public repository. -->
+    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>
