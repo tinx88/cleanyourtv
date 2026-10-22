@@ -504,7 +504,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
             @Override
             public void onScrollStateChanged(@NonNull RecyclerView rv, int state) {
-                if (cosyLayout && state == RecyclerView.SCROLL_STATE_IDLE) refreshCosyDockClip();
+                if (cosyLayout && state == RecyclerView.SCROLL_STATE_IDLE) {
+                    refreshCosyDockClip();
+                    // Cold-start layout can move the dock after focus was first drawn.
+                    // Re-measure once the RecyclerView has finished repositioning it.
+                    rv.post(MainActivity.this::refitGlass);
+                }
             }
         });
 
@@ -1356,7 +1361,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
     }
 
-    /** Refits the glass to the focused holder once the grid layout and tile dimensions settle. */
+    /** Refits the glass after a size OR position change. At a cold boot, the dock's
+     * bottom padding can move its tiles after focus was drawn, without changing
+     * their width. Comparing only width/height left the outline floating above
+     * Prime Video until another app was opened and Home resumed.
+     */
     private void refitGlass() {
         if (isDestroyed() || adapter.appCount() == 0 || libraryFocusPending) return;
         int pos = Math.max(0, Math.min(lastFocused, adapter.appCount() - 1));
@@ -1369,6 +1378,24 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int h = (int) (card.getHeight() * scale + 2 * pad);
         if (!glassShown || card.getWidth() != glassCardW || glass.getWidth() != w || glass.getHeight() != h) {
             onTileFocused(pos, card);
+        }
+        if (!cosyLayout || !glassShown || grid.getScrollState() != RecyclerView.SCROLL_STATE_IDLE) return;
+        // Work from the final card position in root coordinates, not the initial
+        // focus position computed before the grid's dynamic bottom-dock padding.
+        Rect actual = new Rect(0, 0, card.getWidth(), card.getHeight());
+        root.offsetDescendantRectToMyCoords(card, actual);
+        float x = actual.exactCenterX() - (card.getWidth() * scale + 2 * pad) / 2f;
+        float y = actual.exactCenterY() - (card.getHeight() * scale + 2 * pad) / 2f
+                - (advancedEffects ? 4f * density : 0f);
+        if (Math.abs(glass.getTranslationX() - x) > 2f * density
+                || Math.abs(glass.getTranslationY() - y) > 2f * density) {
+            springX.cancel();
+            springY.cancel();
+            glassScrollShift = 0f;
+            glassTargetX = x;
+            glassTargetY = y;
+            glass.setTranslationX(x);
+            glass.setTranslationY(y);
         }
     }
 
