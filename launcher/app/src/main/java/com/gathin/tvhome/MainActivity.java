@@ -143,6 +143,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean animations;
     private boolean advancedEffects;
     private TextView greeting;
+    private TextView weatherSummary;
+    private String weatherSuburb = "";
     private View clockBlock;
     private View btnInputs;
     /** Optional compact vertical button rail used by the Family Cosy theme. */
@@ -357,6 +359,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         greeting = findViewById(R.id.greeting);
         clockBlock = findViewById(R.id.leftBlock);
         greetingColor = greeting.getCurrentTextColor();
+        weatherSummary = findViewById(R.id.weatherSummary);
+        weatherSuburb = cfg.weatherSuburb;
+        wallpaperPlayer.setWeatherListener(this::showWeatherSummary);
         btnWifi = findViewById(R.id.btnWifi);
         shamsiDate = findViewById(R.id.shamsiDate);
         stats = findViewById(R.id.stats);
@@ -2022,6 +2027,27 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         raceSessions.setText(row);
         racePanel.setVisibility(View.VISIBLE);
+    }
+
+    /** Show only actual bridge data. No stale temperature or invented offline label. */
+    private void showWeatherSummary(WeatherFeed.WeatherData data) {
+        if (weatherSummary == null) return;
+        if (data == null || data.condition == null || data.condition.isEmpty()) {
+            weatherSummary.setText(null);
+            weatherSummary.setVisibility(View.GONE);
+            return;
+        }
+        StringBuilder label = new StringBuilder();
+        if (!weatherSuburb.isEmpty()) label.append(weatherSuburb);
+        if (data.temperature != null) {
+            if (label.length() > 0) label.append("  ·  ");
+            label.append(String.format(Locale.US, "%.1f°C", data.temperature));
+        }
+        if (label.length() > 0) label.append("  ·  ");
+        label.append(Character.toUpperCase(data.condition.charAt(0)))
+                .append(data.condition.substring(1));
+        weatherSummary.setText(label.toString());
+        weatherSummary.setVisibility(View.VISIBLE);
     }
 
     private void refreshPillsAfterNextDraw() {
