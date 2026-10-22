@@ -475,6 +475,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // even when the theme requests an extra visible row below the dock.
             int shelfClearance = cfg.appLibrary ? hero.getMeasuredHeight() + (int) (40 * density) : 0;
             int want = Math.max(shelfClearance, h - dockRow - gridRows - (int) (AppAdapter.BOTTOM_ROOM_DP * density));
+            // The Cosy scene has no app title: settle its six shortcuts lower, above the screen's safe edge.
+            if (cosyLayout) want += Math.round(35 * density);
             // Where the rows cannot fit even at the smallest tile (3 rows with the title on), the title keeps its
             // room above the dock and the last rows run off the bottom instead of the title drawing over the clock.
             if (MainActivity.this.dockRow && cfg.dockTitle && rowsBelowDock > 0) want = Math.max(want, (int) (AppAdapter.TITLE_ROOM_DP * density));
@@ -938,6 +940,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (handleSettingsKey(event)) return true;
+        // The cosy home masks rows below the dock. Unmask BEFORE focus search on Down,
+        // so Android TV can discover the next row and scroll into it normally.
+        if (cosyLayout && event.getAction() == KeyEvent.ACTION_DOWN
+                && event.getKeyCode() == KeyEvent.KEYCODE_DPAD_DOWN) {
+            int focused = focusedTilePosition();
+            if (focused >= 0 && focused < COLUMNS) grid.setClipBounds(null);
+        }
         if (!reordering) return super.dispatchKeyEvent(event);
         if (dockEditing) return dispatchDockEdit(event);
         boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
@@ -999,6 +1008,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         adapter.setReordering(true);
         if (adapter.hasEmptySlots()) reloadTiles();   // every position must hold a tile that can move
         reordering = true;
+        if (cosyLayout) grid.setClipBounds(null);
         orderAtStart = adapter.movableKeys();
         glass.setAccent(REORDER_ACCENT);
         btnReorder.setActivated(true);
@@ -1104,6 +1114,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Ends the mode and saves the order if it changed since the mode started. */
     private void endReorder() {
         if (!reordering) return;
+        if (cosyLayout) grid.setClipBounds(null);
         dockEditing = false;
         dockEditSlot = -1;
         drop();
@@ -1273,6 +1284,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             springY.animateToFinalPosition(y - glassScrollShift);
         }
         View item = (View) card.getParent();
+        if (cosyLayout) {
+            if (position < COLUMNS && !reordering && grid.getWidth() > 0) {
+                // Show exactly one dock row at rest. The remaining apps stay in the
+                // RecyclerView and become visible when Down moves focus to them.
+                int edge = Math.min(grid.getHeight(), item.getBottom());
+                grid.setClipBounds(new Rect(0, 0, grid.getWidth(), Math.max(0, edge)));
+            } else {
+                grid.setClipBounds(null);
+            }
+        }
         if (dockRow && position < COLUMNS) {
             // Dock: park it at the bottom of the screen and show the top shelf for this app.
             int decoratedTop = item.getTop() - (int) (6 * density);
