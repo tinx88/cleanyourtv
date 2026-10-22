@@ -1,0 +1,19 @@
+{
+  "wallpaper": true,
+  "wallpaper_order": "weather",
+  "weather_url": "http://192.168.0.21:5056/weather",
+  "wallpaper_dim": 0,
+  "wallpaper_true_color": true,
+  "wallpaper_rotation_minutes": 0,
+  "sky_intensity": 0,
+  "ambient_glow": false,
+  "live_tv_package": "com.sony.dtv.tvx",
+  "hidden_apps": [
+    "com.sony.dtv.tvx"
+  ],
+  "dock_apps": [
+    "com.amazon.amazonvideo.livingroom",
+    "com.google.android.youtube.tv",
+    "com.disney.disneyplus"
+  ]
+}
