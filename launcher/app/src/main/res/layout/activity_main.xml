@@ -272,6 +272,27 @@
                     </LinearLayout>
                 </LinearLayout>
 
+                <!-- Family Cosy only: the live suburb, temperature and forecast condition.
+                     Gone when the bridge is offline; never displaces the clock/date baseline. -->
+                <TextView
+                    android:id="@+id/weatherSummary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginTop="7dp"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:textColor="#EDFFFFFF"
+                    android:textSize="16sp"
+                    android:fontFamily="@font/outfit_medium"
+                    android:letterSpacing="0.02"
+                    android:shadowColor="#80000000"
+                    android:shadowDx="0"
+                    android:shadowDy="1"
+                    android:shadowRadius="3"
+                    android:importantForAccessibility="no"
+                    android:visibility="gone" />
+
             </LinearLayout>
 
             <!-- Shown only when show_stats is on. Outside leftBlock, so the top buttons stay level with the clock
