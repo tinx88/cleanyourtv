@@ -91,11 +91,14 @@ if ($homeNow -notlike 'com.gathin.tvhome/*') {
 }
 Write-Host "Home now resolves to $homeNow"
 # Optional accessibility services, appended to enabled_accessibility_services without dropping others.
+# TCL's TclAppBoot can refuse to bind a sideloaded accessibility service while the app is not running.
+# Grant its vendor auto-start app-op when available and persist it; other Android TV builds ignore the unknown op.
 function Enable-Service([string]$Name) {
     $svc = "com.gathin.tvhome/.$Name"
     # Through stdin: Windows PowerShell 5.1 drops the inner double quotes from a native argument, and the
-    # TV's shell then fails with "no closing quote" while the service stays off.
-    ('s=$(settings get secure enabled_accessibility_services); case "$s" in *' + $Name + '*) ;; null|"") settings put secure enabled_accessibility_services ' + $svc + ' ;; *) settings put secure enabled_accessibility_services "$s:' + $svc + '" ;; esac; settings put secure accessibility_enabled 1; echo ' + $Name + ' enabled') |
+    # TV's shell then fails with "no closing quote" while the service stays off. If the helper was already
+    # listed during a reinstall, force an off/on list change so Android actually binds it again.
+    ('(appops set com.gathin.tvhome APP_AUTO_START allow 2>/dev/null || appops set com.gathin.tvhome AUTO_START allow 2>/dev/null || true); appops write-settings 2>/dev/null || true; s=$(settings get secure enabled_accessibility_services); case "$s" in *' + $Name + '*) settings put secure enabled_accessibility_services ""; settings put secure accessibility_enabled 0; sleep 1; settings put secure enabled_accessibility_services "$s" ;; null|"") settings put secure enabled_accessibility_services ' + $svc + ' ;; *) settings put secure enabled_accessibility_services "$s:' + $svc + '" ;; esac; settings put secure accessibility_enabled 1; echo ' + $Name + ' enabled') |
         & $py -I ..\tools\tv.py --batch
 }
 if ($InputKeyService) { Enable-Service 'InputKeyService' }
