@@ -23,14 +23,12 @@ DIR=/sdcard/Android/data/$PKG/files
 REVISION="$("$PY" -I -c 'import uuid; print(uuid.uuid4().hex)')"
 tv() { "$PY" -I tv.py "$@"; }
 # Restart Home so it rereads the theme. Android drops a force-stopped app's accessibility services from the
-# enabled list, which would switch off InputKeyService/HomeKeyService, so put the list back if it had ours.
-# Android removes them asynchronously while it handles the restart, so wait a second before writing the
-# list back. Writing the same list back is not enough: the force-stop also turns accessibility_enabled off,
-# and the service only binds again once the list changes. So restart first, then clear the list, write it
-# back and switch accessibility on again as build-and-install does. Some TVs (TCL Smart TV Pro G03, Android 11)
-# also keep the service in their "crashed" list after the force-stop and leave it unbound until accessibility
-# itself goes off and on again, so switch it off with the list cleared and wait a second before writing back.
-RESTART="a=\$(settings get secure enabled_accessibility_services); am force-stop $PKG; am start -n $PKG/.MainActivity >/dev/null; case \"\$a\" in *$PKG*) sleep 1; settings put secure enabled_accessibility_services ''; settings put secure accessibility_enabled 0; sleep 1; settings put secure enabled_accessibility_services \"\$a\"; settings put secure accessibility_enabled 1 ;; esac"
+# enabled list, which would switch off InputKeyService/HomeKeyService, so preserve the complete list and restore it.
+# TCL Android 11 builds can leave an enabled service in AccessibilityManager's "crashed" set after a force-stop.
+# A short off/on cycle usually clears it, but firmware updates have been seen to need a longer settle and a second
+# cycle. Retry once when our service is still crashed (or nothing at all is bound), while preserving other apps'
+# accessibility services too.
+RESTART="a=\$(settings get secure enabled_accessibility_services); am force-stop $PKG; am start -n $PKG/.MainActivity >/dev/null; case \"\$a\" in *$PKG*) sleep 1; i=0; while [ \$i -lt 2 ]; do settings put secure enabled_accessibility_services ''; settings put secure accessibility_enabled 0; sleep 2; settings put secure enabled_accessibility_services \"\$a\"; settings put secure accessibility_enabled 1; sleep 3; s=\$(dumpsys accessibility 2>/dev/null); case \"\$s\" in *'Crashed services:'*'$PKG'*|*'Bound services:{}'*) i=\$((i+1)) ;; *) break ;; esac; done; case \"\$s\" in *'Crashed services:'*'$PKG'*) echo 'warning: Family Edition accessibility service is still crashed' >&2 ;; esac ;; esac"
 
 # Some firmware (TCL G07, Android 11) locks the shell out of Android/data. Files are staged in
 # /data/local/tmp and copied in, or written through the launcher's ThemeProvider when that is refused.
