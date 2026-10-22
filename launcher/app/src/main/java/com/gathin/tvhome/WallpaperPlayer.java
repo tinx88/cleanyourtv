@@ -42,6 +42,17 @@ final class WallpaperPlayer {
         weatherListener = listener;
         if (listener != null) listener.onWeatherUpdate(weatherData);
     }
+
+    /** The Cosy renderer owns light/dark palette decisions, including weather changes. */
+    boolean wantsDarkText() {
+        return cosyScene != null && cosyScene.wantsDarkText();
+    }
+
+    void setSceneListener(Runnable callback) {
+        if (cosyScene != null) cosyScene.setListener(() -> {
+            if (callback != null) callback.run();
+        });
+    }
     private long weatherCheckedAt;
     private boolean weatherPolling;
     private static final long WEATHER_POLL_MS = 5 * 60_000L;
