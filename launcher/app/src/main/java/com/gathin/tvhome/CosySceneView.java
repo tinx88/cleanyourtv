@@ -131,14 +131,43 @@ public class CosySceneView extends View {
         String normalised = WeatherWallpaperSelector.validCondition(condition) ? condition : null;
         if (java.util.Objects.equals(weatherCondition, normalised)) return;
         weatherCondition = normalised;
-        invalidate();
+        // The sun/moon and the sky are part of the cached still. Rebuild once on a
+        // forecast change so rain never falls through the original sunny sky.
+        pal = paletteFor(phase, weatherCondition);
+        rebuild();
     }
 
     void setPhase(Phase p) {
         if (p == phase && still != null) return;
         phase = p;
-        pal = p == Phase.DAWN ? DAWN : p == Phase.DAY ? DAY : p == Phase.DUSK ? DUSK : NIGHT;
+        pal = paletteFor(p, weatherCondition);
         rebuild();
+    }
+
+    /** Keep the original Cosy Home colours when clear/offline; weather mutes the sky without losing its daypart. */
+    private static Palette paletteFor(Phase phase, String condition) {
+        Palette base = phase == Phase.DAWN ? DAWN : phase == Phase.DAY ? DAY
+                : phase == Phase.DUSK ? DUSK : NIGHT;
+        if (!"cloudy".equals(condition) && !"rainy".equals(condition) && !"stormy".equals(condition)) {
+            return base;
+        }
+        boolean storm = "stormy".equals(condition);
+        boolean rain = "rainy".equals(condition);
+        int skyTop = storm ? 0xFF273340 : rain ? 0xFF4A5A67 : 0xFF728896;
+        int skyMid = storm ? 0xFF44515D : rain ? 0xFF778790 : 0xFF9EAFB5;
+        int skyHorizon = storm ? 0xFF68727B : rain ? 0xFFABB6BC : 0xFFC3CCCF;
+        float strength = phase == Phase.NIGHT ? 0.22f
+                : phase == Phase.DUSK ? 0.44f
+                : phase == Phase.DAWN ? 0.60f
+                : storm ? 0.94f : rain ? 0.88f : 0.72f;
+        return new Palette(
+                lerp(base.s1, skyTop, strength),
+                lerp(base.s2, skyMid, strength),
+                lerp(base.s3, skyHorizon, strength),
+                lerp(base.h1, 0xFF687D79, strength * 0.55f),
+                lerp(base.h2, 0xFF465E59, strength * 0.50f),
+                lerp(base.h3, 0xFF263C38, strength * 0.35f),
+                base.win, base.glow, false);
     }
 
     /** Frees the full-screen still while an app is in front; the next {@link #setPhase} redraws it. */
@@ -180,7 +209,10 @@ public class CosySceneView extends View {
         c.drawRect(0, 0, W, H, paint);
         paint.setShader(null);
 
-        switch (phase) {
+        // When the forecast says cloud/rain/storm, don't bake a bright sun or moon
+        // into the background bitmap. The clouds themselves remain animated.
+        if (!"cloudy".equals(weatherCondition) && !"rainy".equals(weatherCondition)
+                && !"stormy".equals(weatherCondition)) switch (phase) {
             case DAWN:
                 glowDisc(c, 1180, 660, 68, 0xFFFFE2B4, 0xFFFFD9A0, 0.35f);
                 break;
@@ -277,8 +309,9 @@ public class CosySceneView extends View {
         boolean wet = "rainy".equals(weatherCondition) || "stormy".equals(weatherCondition);
         boolean clouds = wet || "cloudy".equals(weatherCondition);
         if (clouds) {
-            // Keep original cottage and day/night palette, just add a little atmosphere.
-            fx.setColor(Color.argb(wet ? 62 : 34, 14, 24, 44));
+            // Sky/hills are already overcast in the cached still, so use only a
+            // light atmospheric tint over the foreground.
+            fx.setColor(Color.argb(wet ? 30 : 18, 14, 24, 44));
             canvas.drawRect(0, 0, W, H, fx);
         }
         if (!clouds && (phase == Phase.NIGHT || phase == Phase.DUSK)) {
@@ -306,7 +339,14 @@ public class CosySceneView extends View {
         // Drift 230 px one way over 70 s, then back: the mockup's ease-in-out alternate.
         float t = (float) (0.5 - 0.5 * Math.cos(Math.PI * s / 70.0));
         float dx = -90 + 230 * t;
-        fx.setColor(Color.argb(phase == Phase.DAY ? 150 : 120, 255, 255, 255));
+        boolean storm = "stormy".equals(weatherCondition);
+        boolean wet = storm || "rainy".equals(weatherCondition);
+        boolean cloudy = "cloudy".equals(weatherCondition);
+        // Use slate-grey storm clouds instead of sunny white puffs when wet.
+        if (storm) fx.setColor(Color.argb(170, 126, 142, 154));
+        else if (wet) fx.setColor(Color.argb(150, 158, 173, 185));
+        else if (cloudy) fx.setColor(Color.argb(155, 201, 210, 218));
+        else fx.setColor(Color.argb(phase == Phase.DAY ? 150 : 120, 255, 255, 255));
         for (float[] cl : CLOUDS) {
             c.drawOval(cl[0] - cl[2] + dx, cl[1] - cl[3], cl[0] + cl[2] + dx, cl[1] + cl[3], fx);
         }
