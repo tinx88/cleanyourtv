@@ -2161,8 +2161,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         FrameLayout.LayoutParams position = new FrameLayout.LayoutParams(
                 buttonSize, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END | Gravity.TOP);
-        position.topMargin = Math.round(154 * density);
-        position.setMarginEnd(Math.round(20 * density));
+        // Keep all four controls above the hero/dock area, in the TV safe zone.
+        position.topMargin = Math.round(28 * density);
+        position.setMarginEnd(Math.round(30 * density));
         root.addView(rail, position);
     }
 
