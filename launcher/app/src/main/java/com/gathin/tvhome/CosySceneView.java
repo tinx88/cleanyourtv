@@ -14,7 +14,8 @@ import android.util.AttributeSet;
 import android.view.View;
 
 /**
- * Cosy Home scene by Oliver Roberts, MIT licensed. See docs/licenses/COSY-HOME-MIT.txt.\n * The cosy valley behind the clock: sky, sun or moon, three hills and a cottage.
+ * Cosy Home scene by Oliver Roberts, MIT licensed. See docs/licenses/COSY-HOME-MIT.txt.
+ * The cosy valley behind the clock: sky, sun or moon, three hills and a cottage.
  *
  * Drawn on a 1920x1080 design canvas and scaled to the view. Everything that never moves is
  * painted once per phase into {@link #still}; each frame only adds the stars, clouds and chimney
@@ -69,6 +70,8 @@ public class CosySceneView extends View {
             {420, 260, 130, 34}, {500, 240, 90, 40}, {1000, 380, 160, 30}, {1080, 362, 80, 34}, {1760, 430, 120, 26}};
 
     private Phase phase = Phase.NIGHT;
+    /** Null: original Cosy Home. Otherwise optional BOM-driven animation. */
+    private String weatherCondition;
     private Palette pal = NIGHT;
     private Bitmap still;
     private Bitmap blurred;
@@ -122,6 +125,13 @@ public class CosySceneView extends View {
     /** A small, heavily blurred copy of the still scene, for the glass panels to sample. */
     Bitmap blurred() {
         return blurred;
+    }
+
+    void setWeatherCondition(String condition) {
+        String normalised = WeatherWallpaperSelector.validCondition(condition) ? condition : null;
+        if (java.util.Objects.equals(weatherCondition, normalised)) return;
+        weatherCondition = normalised;
+        invalidate();
     }
 
     void setPhase(Phase p) {
@@ -264,8 +274,19 @@ public class CosySceneView extends View {
         float seconds = (SystemClock.uptimeMillis() - start) / 1000f;
         canvas.save();
         canvas.scale(getWidth() / W, getHeight() / H);
-        if (phase == Phase.NIGHT || phase == Phase.DUSK) drawStars(canvas, seconds, phase == Phase.NIGHT ? 1f : 0.35f);
-        if (phase == Phase.DAWN || phase == Phase.DAY) drawClouds(canvas, seconds);
+        boolean wet = "rainy".equals(weatherCondition) || "stormy".equals(weatherCondition);
+        boolean clouds = wet || "cloudy".equals(weatherCondition);
+        if (clouds) {
+            // Keep original cottage and day/night palette, just add a little atmosphere.
+            fx.setColor(Color.argb(wet ? 62 : 34, 14, 24, 44));
+            canvas.drawRect(0, 0, W, H, fx);
+        }
+        if (!clouds && (phase == Phase.NIGHT || phase == Phase.DUSK)) {
+            drawStars(canvas, seconds, phase == Phase.NIGHT ? 1f : 0.35f);
+        }
+        if (clouds || phase == Phase.DAWN || phase == Phase.DAY) drawClouds(canvas, seconds);
+        if (wet) drawRain(canvas, seconds, "stormy".equals(weatherCondition));
+        if ("stormy".equals(weatherCondition)) drawLightning(canvas, seconds);
         if (phase != Phase.DAY) drawSmoke(canvas, seconds);
         canvas.restore();
         if (running) postInvalidateDelayed(FRAME_MS);
@@ -289,6 +310,35 @@ public class CosySceneView extends View {
         for (float[] cl : CLOUDS) {
             c.drawOval(cl[0] - cl[2] + dx, cl[1] - cl[3], cl[0] + cl[2] + dx, cl[1] + cl[3], fx);
         }
+    }
+
+    /** Sparse, deterministic wind-blown rain. No per-frame allocations or background task. */
+    private void drawRain(Canvas c, float seconds, boolean heavy) {
+        int count = heavy ? 116 : 70;
+        fx.setStrokeWidth(heavy ? 2.1f : 1.7f);
+        for (int i = 0; i < count; i++) {
+            float x = (i * 173 + 31) % 2010 - 40;
+            float y = (i * 269 + seconds * (heavy ? 970f : 660f)) % 1180 - 80;
+            float length = (heavy ? 29 : 20) + (i % 7);
+            fx.setColor(Color.argb(heavy ? 125 : 93, 205, 223, 244));
+            c.drawLine(x, y, x - (heavy ? 10 : 6), y + length, fx);
+        }
+    }
+
+    /** Distant, subtle bolt, about once every 31 seconds. No strobe/flashing UI. */
+    private void drawLightning(Canvas c, float seconds) {
+        float cycle = seconds % 31f;
+        if (cycle > 0.23f) return;
+        fx.setColor(Color.argb(cycle < 0.10f ? 27 : 13, 234, 241, 255));
+        c.drawRect(0, 0, W, H, fx);
+        fx.setColor(Color.argb(cycle < 0.10f ? 135 : 65, 235, 242, 255));
+        fx.setStrokeWidth(5f);
+        Path bolt = new Path();
+        bolt.moveTo(1240, 135);
+        bolt.lineTo(1190, 260);
+        bolt.lineTo(1240, 265);
+        bolt.lineTo(1160, 415);
+        c.drawPath(bolt, fx);
     }
 
     private void drawSmoke(Canvas c, float s) {
