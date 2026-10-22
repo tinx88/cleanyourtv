@@ -20,13 +20,10 @@ if (-not (Test-Path $py)) { throw 'run: python -m venv tools\venv; tools\venv\Sc
 $pkg = 'com.gathin.tvhome'
 $dir = "/sdcard/Android/data/$pkg/files"
 $revision = [guid]::NewGuid().ToString('N')
-# Restart Home so it rereads the theme. Android drops a force-stopped app's accessibility services from the
-# enabled list (asynchronously, so wait a second), which would switch off InputKeyService/HomeKeyService;
-# put the list back if it had ours. Writing the same list back is not enough: the force-stop also turns
-# accessibility_enabled off, and the service only binds again once the list changes. So restart first, then
-# clear the list, switch accessibility off (some TVs keep the service "crashed" and unbound otherwise), write
-# the list back and switch accessibility on again.
-$restart = "a=`$(settings get secure enabled_accessibility_services); am force-stop $pkg; am start -n $pkg/.MainActivity >/dev/null; case `"`$a`" in *$pkg*) sleep 1; settings put secure enabled_accessibility_services ''; settings put secure accessibility_enabled 0; sleep 1; settings put secure enabled_accessibility_services `"`$a`"; settings put secure accessibility_enabled 1 ;; esac"
+# Restart Home so it rereads the theme. Preserve the complete accessibility-service list across the force-stop.
+# TCL Android 11 builds can leave an enabled service in AccessibilityManager's "crashed" set; allow extra settle
+# time and retry the off/on cycle once when our service is still crashed (or nothing at all is bound).
+$restart = "a=`$(settings get secure enabled_accessibility_services); am force-stop $pkg; am start -n $pkg/.MainActivity >/dev/null; case `"`$a`" in *$pkg*) sleep 1; i=0; while [ `$i -lt 2 ]; do settings put secure enabled_accessibility_services ''; settings put secure accessibility_enabled 0; sleep 2; settings put secure enabled_accessibility_services `"`$a`"; settings put secure accessibility_enabled 1; sleep 3; s=`$(dumpsys accessibility 2>/dev/null); case `"`$s`" in *'Crashed services:'*'$pkg'*|*'Bound services:{}'*) i=`$((i+1)) ;; *) break ;; esac; done; case `"`$s`" in *'Crashed services:'*'$pkg'*) echo 'warning: Family Edition accessibility service is still crashed' >&2 ;; esac ;; esac"
 
 # Some firmware (TCL G07, Android 11) locks the shell out of Android/data. Files are staged in
 # /data/local/tmp and copied in, or written through the launcher's ThemeProvider when that is refused.
