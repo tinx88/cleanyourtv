@@ -61,6 +61,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
+import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -144,6 +145,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private TextView greeting;
     private View clockBlock;
     private View btnInputs;
+    /** Optional compact vertical button rail used by the Family Cosy theme. */
+    private boolean rightIconRail;
     private TextView btnWifi;
     /** The network pill's icon as last set, so a refresh that changes nothing does not lay the top bar out again. */
     private int wifiIcon;
@@ -527,12 +530,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             libraryFromTopBar = true;   // closing it goes back to this button, not to the pill after the last row
         });
         btnLibraryTop.setVisibility(cfg.libraryButton && cfg.appLibrary ? View.VISIBLE : View.GONE);
-        iconOnlyButtons = cfg.iconOnlyButtons;
-        wifiIconOnly = iconOnlyButtons && cfg.wifiLabelWidth <= 0;
+        rightIconRail = cfg.rightIconRail;
+        iconOnlyButtons = cfg.iconOnlyButtons || rightIconRail;
+        wifiIconOnly = iconOnlyButtons && (rightIconRail || cfg.wifiLabelWidth <= 0);
         if (iconOnlyButtons) {
-            if (cfg.wifiLabelWidth > 0) btnWifi.setMaxWidth(Math.round(cfg.wifiLabelWidth * density));
-            else makeIconOnly(btnWifi);
+            if (!rightIconRail && cfg.wifiLabelWidth > 0) {
+                btnWifi.setMaxWidth(Math.round(cfg.wifiLabelWidth * density));
+            } else {
+                makeIconOnly(btnWifi);
+            }
             makeIconOnly((TextView) btnSettings);
+        }
+        if (rightIconRail) {
+            makeIconOnly((TextView) btnInputs);
+            moveTopButtonsToRightRail();
         }
         btnSettings.setOnLongClickListener(v -> {
             showSettingsMenu();
@@ -544,6 +555,25 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         boolean rtlMenuBar = getResources().getBoolean(R.bool.rtl_menu_bar);
         View.OnKeyListener pillKeys = (v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (rightIconRail) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    focusTile(lastFocused % COLUMNS);
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return true;
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    LinearLayout rail = findViewById(R.id.topButtons);
+                    int step = keyCode == KeyEvent.KEYCODE_DPAD_UP ? -1 : 1;
+                    for (int i = rail.indexOfChild(v) + step; i >= 0 && i < rail.getChildCount(); i += step) {
+                        View candidate = rail.getChildAt(i);
+                        if (candidate.getVisibility() == View.VISIBLE && candidate.isFocusable()) {
+                            candidate.requestFocus();
+                            break;
+                        }
+                    }
+                    return true;
+                }
+            }
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                 // Back to the dock tile Up came from, not wherever the focus finder lands.
@@ -1766,6 +1796,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 focusLibrary();
                 return true;
             }
+            // The right rail is reached naturally by pressing Right on the dock's last app.
+            if (rightIconRail && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && position < COLUMNS
+                    && position == Math.min(count, adapter.dockFilled()) - 1) {
+                View first = btnInputs.getVisibility() == View.VISIBLE ? btnInputs : firstTopButton();
+                first.requestFocus();
+                return true;
+            }
             // In the dock, the last app is the row's end: the empty slots after it take no focus.
             int rowCount = position < COLUMNS ? Math.min(count, adapter.dockFilled()) : count;
             return GridNavigation.atHorizontalEdge(position, rowCount, COLUMNS,
@@ -2097,6 +2134,38 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** The open library came from that button: closing it returns there instead of scrolling to the grid's end. */
     private boolean libraryFromTopBar;
 
+    /**
+     * Move only the existing button views: click/long-click handlers, Wi-Fi updates and
+     * popup anchors keep their identities. The top header no longer reserves horizontal
+     * room for the buttons, leaving the sun visible above the dock.
+     */
+    private void moveTopButtonsToRightRail() {
+        LinearLayout rail = findViewById(R.id.topButtons);
+        ViewGroup originalParent = (ViewGroup) rail.getParent();
+        originalParent.removeView(rail);
+
+        RelativeLayout.LayoutParams header = (RelativeLayout.LayoutParams) clockBlock.getLayoutParams();
+        header.removeRule(RelativeLayout.START_OF);
+        header.setMarginEnd(0);
+        clockBlock.setLayoutParams(header);
+
+        rail.setOrientation(LinearLayout.VERTICAL);
+        rail.setGravity(Gravity.CENTER_HORIZONTAL);
+        rail.setClipChildren(false);
+        rail.setClipToPadding(false);
+        int buttonSize = Math.round(42 * density);
+        for (int i = 0; i < rail.getChildCount(); i++) {
+            LinearLayout.LayoutParams item = new LinearLayout.LayoutParams(buttonSize, buttonSize);
+            item.bottomMargin = Math.round(12 * density);
+            rail.getChildAt(i).setLayoutParams(item);
+        }
+        FrameLayout.LayoutParams position = new FrameLayout.LayoutParams(
+                buttonSize, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END | Gravity.TOP);
+        position.topMargin = Math.round(154 * density);
+        position.setMarginEnd(Math.round(20 * density));
+        root.addView(rail, position);
+    }
+
     /** Turns a labelled top pill into the round TopButtonIcon shape: no text, the icon centred by even padding. */
     private void makeIconOnly(TextView pill) {
         pill.setContentDescription(pill.getText());
@@ -2418,7 +2487,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         panel.setPivotY(0f);
         panel.setScaleY(0.92f);
         panel.setTranslationY(-8 * density);
-        popup.showAsDropDown(anchor, 0, (int) (10 * density), gravity);
+        popup.showAsDropDown(anchor, 0, (int) (10 * density), rightIconRail ? Gravity.END : gravity);
         panel.animate().alpha(1f).scaleY(1f).translationY(0f).setDuration(220)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
     }
