@@ -31,6 +31,17 @@ final class WallpaperPlayer {
     private final String weatherUrl;
     private final CosySceneView cosyScene;
     private String weatherCondition;
+    private WeatherFeed.WeatherData weatherData;
+    private WeatherUpdateListener weatherListener;
+
+    interface WeatherUpdateListener {
+        void onWeatherUpdate(WeatherFeed.WeatherData reading);
+    }
+
+    void setWeatherListener(WeatherUpdateListener listener) {
+        weatherListener = listener;
+        if (listener != null) listener.onWeatherUpdate(weatherData);
+    }
     private long weatherCheckedAt;
     private boolean weatherPolling;
     private static final long WEATHER_POLL_MS = 5 * 60_000L;
@@ -230,11 +241,13 @@ final class WallpaperPlayer {
         weatherCheckedAt = now;
         weatherPolling = true;
         decoder.execute(() -> {
-            String result = WeatherFeed.fetchCondition(weatherUrl);
+            WeatherFeed.WeatherData result = WeatherFeed.fetch(weatherUrl);
             root.post(() -> {
                 weatherPolling = false;
                 if (closed) return;
-                weatherCondition = result;
+                weatherData = result;
+                weatherCondition = result == null ? null : result.condition;
+                if (weatherListener != null) weatherListener.onWeatherUpdate(result);
                 if (active) update();
             });
         });
