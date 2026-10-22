@@ -97,6 +97,11 @@
     <string-array name="app_keys" translatable="false">
     </string-array>
 
+    <!-- Sony X90J Family Edition: keep launcherx and setupwraith enabled for casting.
+         HomeKeyService redirects the remote HOME key and covers stock Home window events.
+         Leave disabled for TCL builds until their HOME behaviour is tested. -->
+    <bool name="take_over_home">true</bool>
+
     <!-- Show the Solar Hijri (Shamsi) date used in Iran and Afghanistan, e.g. "27 Mehr 1405", above the
          Gregorian date. -->
     <bool name="shamsi_date">false</bool>
