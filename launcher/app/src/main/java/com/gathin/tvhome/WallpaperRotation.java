@@ -13,9 +13,10 @@ final class WallpaperRotation {
     static final String ORDER_SEQUENTIAL = "sequential";
     static final String ORDER_SHUFFLE = "shuffle";
     static final String ORDER_DAYPART = "daypart";
+    static final String ORDER_WEATHER = "weather";
 
     static boolean validOrder(String order) {
-        return ORDER_SEQUENTIAL.equals(order) || ORDER_SHUFFLE.equals(order) || ORDER_DAYPART.equals(order);
+        return ORDER_SEQUENTIAL.equals(order) || ORDER_SHUFFLE.equals(order) || ORDER_DAYPART.equals(order) || ORDER_WEATHER.equals(order);
     }
 
     static List<File> images(File directory) {
