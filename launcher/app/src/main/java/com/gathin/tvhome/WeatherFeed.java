@@ -18,7 +18,7 @@ final class WeatherFeed {
         HttpURLConnection conn = null;
         try {
             URL url = new URL(address.trim());
-            if (!"http".equals(url.getProtocol()) || url.getUserInfo() != null ||
+            if (!"http".equals(url.getProtocol()) ||
                     url.getPort() != 5056 || !"/weather".equals(url.getPath()) ||
                     (url.getQuery() != null && !url.getQuery().isEmpty())) return null;
             // Pinned to an RFC1918 LAN address; never fetch URLs from a public server.
