@@ -21,6 +21,15 @@ icon/summary, not an instantaneous rain radar observation; it can indicate a
 rainy day before the first raindrops arrive. Poll every five minutes while
 Home is visible. All animations run locally and stop when leaving Home.
 
+The Family Cosy launcher also shows an understated weather readout under the
+clock, for example `Mount Waverley · 29.8°C · Sunny`. The suburb is the
+display-only `weather_suburb` theme key, not a location automatically inferred
+from the TV. Match it to the saved FamilyOS forecast location, and change it
+locally for another household/TV. Current temperature is displayed to one
+decimal place when BOM observations are fresh; a stale or missing observation
+omits only temperature, and a failed or stale forecast hides the entire line.
+No data source/provider attribution appears on screen.
+
 ## Weather feed
 
 The separate private FamilyOS repository contains
