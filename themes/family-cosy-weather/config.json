@@ -1,7 +1,7 @@
 {
   "wallpaper": true,
   "wallpaper_order": "weather",
-  "weather_url": "http://192.168.0.21:5056/weather",
+  "weather_url": "",
   "wallpaper_dim": 0,
   "wallpaper_true_color": true,
   "wallpaper_rotation_minutes": 0,
