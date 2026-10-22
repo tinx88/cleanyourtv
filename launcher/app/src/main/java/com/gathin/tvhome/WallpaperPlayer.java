@@ -126,7 +126,7 @@ final class WallpaperPlayer {
 
     void start() {
         active = true;
-        if (cosyScene != null) cosyScene.setRunning(weatherCondition == null);
+        if (cosyScene != null) cosyScene.setRunning(true);
         update();
     }
 
@@ -146,16 +146,14 @@ final class WallpaperPlayer {
         if (!active || closed) return;
         pollWeatherIfDue();
         if (cosyScene != null) {
+            // Weather is animated directly over Cosy Home, never a downloaded wallpaper.
+            // Null from the bridge (including stale/timeout) clears weather effects instantly.
             updateCosyPhase();
-            String condition = weatherCondition;
-            // No forecast or no condition-matched local photos: always use animated Cosy Home.
-            if (condition == null || WeatherWallpaperSelector.matching(files, condition).isEmpty()) {
-                image.setVisibility(View.GONE);
-                cosyScene.setVisibility(View.VISIBLE);
-                cosyScene.setRunning(true);
-                return;
-            }
-            // Keep the cosy scene behind the photo until the first weather image is decoded.
+            cosyScene.setWeatherCondition(weatherCondition);
+            image.setVisibility(View.GONE);
+            cosyScene.setVisibility(View.VISIBLE);
+            cosyScene.setRunning(true);
+            return;
         }
         if (loading || files.isEmpty()) return;
         String previous = preferences.getString("image", "");
