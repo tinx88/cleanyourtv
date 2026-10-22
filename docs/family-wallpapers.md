@@ -28,7 +28,10 @@ CleanYourTV scenes, grouped by filename. All photos stay on the TV once pushed.
    state *outside this public repository*. Do not disable anything yet.
 3. Build with `cd launcher && ./gradlew testReleaseUnitTest lintRelease assembleRelease`.
 4. Install according to `launcher/build-and-install.sh`, with the rollback
-   procedure ready. Only disable stock Home if the new Home works.
+   procedure ready. **Do not disable stock Home or setupwraith on the Sony
+   X90J trial**: use the opt-in HomeKeyService workaround documented in
+   [the device report](devices/sony-xr-65x90j-m-pa.md). Other models need
+   their own HOME and casting dependency inspection.
 5. Apply `TV_HOST=<TV_IP> tools/theme.sh themes/family-time-of-day`.
 6. Check real remote buttons, HDMI, live TV, streaming apps and firmware updates.
    Reboot once. Turn off and revoke ADB debugging when finished.
