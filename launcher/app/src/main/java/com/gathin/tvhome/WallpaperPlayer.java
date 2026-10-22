@@ -28,6 +28,12 @@ final class WallpaperPlayer {
     private final List<File> files;
     private final long interval;
     private final String order;
+    private final String weatherUrl;
+    private final CosySceneView cosyScene;
+    private String weatherCondition;
+    private long weatherCheckedAt;
+    private boolean weatherPolling;
+    private static final long WEATHER_POLL_MS = 5 * 60_000L;
     private final double latitude;
     private final double longitude;
     private final SharedPreferences preferences;
@@ -48,6 +54,7 @@ final class WallpaperPlayer {
         interval = config.wallpaperRotationMinutes * 60_000L;
         bitmapConfig = config.wallpaperTrueColor ? Bitmap.Config.ARGB_8888 : Bitmap.Config.RGB_565;
         order = config.wallpaperOrder;
+        weatherUrl = config.weatherUrl;
         latitude = coordinate(context, R.string.latitude);
         longitude = coordinate(context, R.string.longitude);
         preferences = context.getSharedPreferences("wallpaper_rotation", Context.MODE_PRIVATE);
@@ -61,11 +68,18 @@ final class WallpaperPlayer {
         DisplayMetrics metrics = context.getResources().getDisplayMetrics();
         width = metrics.widthPixels;
         height = metrics.heightPixels;
+        if (WallpaperRotation.ORDER_WEATHER.equals(order) && config.wallpaperEnabled) {
+            cosyScene = new CosySceneView(context, null);
+            root.addView(cosyScene, 0, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        } else {
+            cosyScene = null;
+        }
         image = new ImageView(context);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        if (config.wallpaperEnabled && !files.isEmpty()) {
-            root.addView(image, 0, new FrameLayout.LayoutParams(
+        if (config.wallpaperEnabled && (!files.isEmpty() || cosyScene != null)) {
+            root.addView(image, cosyScene != null ? 1 : 0, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             // No shade layer at all when the theme doesn't dim: a full-screen view is overdraw on 1 GB TVs.
             if (config.wallpaperDim > 0) {
@@ -75,7 +89,12 @@ final class WallpaperPlayer {
                 root.addView(shade, 1, new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             }
-            showFirst();
+            if (cosyScene != null) {
+                image.setVisibility(View.GONE);
+                updateCosyPhase();
+            } else {
+                showFirst();
+            }
         }
     }
 
@@ -107,21 +126,39 @@ final class WallpaperPlayer {
 
     void start() {
         active = true;
+        if (cosyScene != null) cosyScene.setRunning(weatherCondition == null);
         update();
     }
 
     void stop() {
         active = false;
+        if (cosyScene != null) cosyScene.setRunning(false);
     }
 
     void close() {
         active = false;
         closed = true;
         decoder.shutdownNow();
+        if (cosyScene != null) cosyScene.setRunning(false);
     }
 
     void update() {
-        if (!active || closed || loading || files.isEmpty()) return;
+        if (!active || closed) return;
+        pollWeatherIfDue();
+        if (cosyScene != null) {
+            updateCosyPhase();
+            String condition = weatherCondition;
+            // No forecast or no condition-matched local photos: always use animated Cosy Home.
+            if (condition == null || WeatherWallpaperSelector.matching(files, condition).isEmpty()) {
+                image.setVisibility(View.GONE);
+                cosyScene.setVisibility(View.VISIBLE);
+                cosyScene.setRunning(true);
+                return;
+            }
+            cosyScene.setRunning(false);
+            cosyScene.setVisibility(View.GONE);
+        }
+        if (loading || files.isEmpty()) return;
         String previous = preferences.getString("image", "");
         List<File> candidates = eligibleFiles();
         File selected = WallpaperRotation.find(candidates, previous);
@@ -147,6 +184,7 @@ final class WallpaperPlayer {
                     return;
                 }
                 image.setImageBitmap(bitmap);
+                image.setVisibility(View.VISIBLE);
                 displayed = next.getName();
                 if (!displayed.equals(previous) || changed == 0) {
                     preferences.edit().putString("image", displayed)
@@ -156,15 +194,52 @@ final class WallpaperPlayer {
         });
     }
 
-    /** Select the current time-of-day image group on Home launch and every minute tick. */
-    private List<File> eligibleFiles() {
-        if (!WallpaperRotation.ORDER_DAYPART.equals(order)) return files;
+    private String currentPhase() {
         Calendar now = Calendar.getInstance();
         int minute = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
         int[] times = WallpaperDaypart.sunTimes(LocalDate.now(), latitude, longitude,
                 ZoneId.systemDefault());
-        return WallpaperDaypart.candidates(files,
-                WallpaperDaypart.phase(minute, times[0], times[1]));
+        return WallpaperDaypart.phase(minute, times[0], times[1]);
+    }
+
+    private void updateCosyPhase() {
+        if (cosyScene == null) return;
+        String phase = currentPhase();
+        CosySceneView.Phase p = WallpaperDaypart.MORNING.equals(phase) ? CosySceneView.Phase.DAWN
+                : WallpaperDaypart.DAY.equals(phase) ? CosySceneView.Phase.DAY
+                : WallpaperDaypart.SUNSET.equals(phase) ? CosySceneView.Phase.DUSK
+                : CosySceneView.Phase.NIGHT;
+        cosyScene.setPhase(p);
+    }
+
+    /** Poll in the decoder thread only while Home is visible. On failure, go straight to Cosy Home. */
+    private void pollWeatherIfDue() {
+        if (cosyScene == null || weatherUrl == null || weatherUrl.isEmpty() || weatherPolling) return;
+        long now = System.currentTimeMillis();
+        if (weatherCheckedAt != 0 && now >= weatherCheckedAt
+                && now - weatherCheckedAt < WEATHER_POLL_MS) return;
+        weatherCheckedAt = now;
+        weatherPolling = true;
+        decoder.execute(() -> {
+            String result = WeatherFeed.fetchCondition(weatherUrl);
+            root.post(() -> {
+                weatherPolling = false;
+                if (closed) return;
+                weatherCondition = result;
+                if (active) update();
+            });
+        });
+    }
+
+    /** Select weather pictures by condition + daypart, or the original daypart images. */
+    private List<File> eligibleFiles() {
+        if (WallpaperRotation.ORDER_WEATHER.equals(order)) {
+            return WeatherWallpaperSelector.candidates(files, weatherCondition, currentPhase());
+        }
+        if (WallpaperRotation.ORDER_DAYPART.equals(order)) {
+            return WallpaperDaypart.candidates(files, currentPhase());
+        }
+        return files;
     }
 
     private static double coordinate(Context ctx, int resource) {
