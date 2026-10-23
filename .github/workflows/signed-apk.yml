@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - feature/family-dynamic-wallpapers
+      - feature/firetv-home-overlay # owner-controlled Fire OS device trial only
     paths:
       - 'launcher/**'
       - '.github/workflows/signed-apk.yml'

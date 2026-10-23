@@ -21,6 +21,8 @@ jobs:
         run: |
           python3 -m venv tools/venv
           tools/venv/bin/pip install -q -r tools/requirements.txt
+      - name: Fire TV installer shell syntax
+        run: bash -n tools/firetv-home.sh
       - name: Example lists, README tables, shell helpers
         env:
           CLEANYOURTV_STRICT: ${{ github.event_name == 'push' && '1' || '' }}
