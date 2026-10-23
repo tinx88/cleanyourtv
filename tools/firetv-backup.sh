@@ -94,6 +94,18 @@ else
     echo "Missing private Fire TV Cosy theme config" >> "$out/manifest.txt"
 fi
 
+# Read the actual applied overlay from our launcher ContentProvider when available.
+# Unlike the host copy, this catches any edits made directly on the Fire TV.
+if tv exec-out content read --uri content://com.gathin.tvhome.theme/config.json \
+        > "$out/theme/applied-config.json" 2>/dev/null \
+        && python3 -m json.tool "$out/theme/applied-config.json" >/dev/null 2>&1; then
+    cp "$out/theme/applied-config.json" "$out/theme/config.json"
+    echo "Captured and validated live Fire TV theme overlay" >> "$out/manifest.txt"
+else
+    rm -f "$out/theme/applied-config.json"
+    echo "Live theme was not readable; using host-side config when available" >> "$out/manifest.txt"
+fi
+
 weather_script="$HOME/docker/familyos-tv-weather/tv_weather.py"
 if [[ -f "$weather_script" ]]; then
     cp -p "$weather_script" "$out/host-weather/tv_weather.py"
@@ -101,7 +113,7 @@ fi
 if command -v docker >/dev/null 2>&1 && docker inspect familyos-tv-weather >/dev/null 2>&1; then
     docker inspect familyos-tv-weather \
       --format '{{range .Config.Env}}{{println .}}{{end}}' \
-      | grep '^TV_WEATHER_ALLOWED_IPS=' > "$out/host-weather/allowed-ips.txt" || true
+      | grep -E '^(TV_WEATHER_ALLOWED_IPS|FAMILYOS_ENVIRONMENT_URL)=' > "$out/host-weather/weather-connection.env" || true
     docker inspect familyos-tv-weather \
       --format 'Image: {{.Config.Image}}\nNetwork: {{.HostConfig.NetworkMode}}\nRestart: {{.HostConfig.RestartPolicy.Name}}' \
       > "$out/host-weather/container-basic.txt"
