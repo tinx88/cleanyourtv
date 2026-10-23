@@ -95,8 +95,10 @@ Fire OS-specific behaviour.
 
 The reusable backup helper captures an **unprivileged ADB snapshot** of the
 Fire TV device (build info, installed/disabled packages, accessibility/HOME
-state, selected settings, screenshot), plus APK installers already held on the
-operator's Docker host and a local copy of the weather and Cosy theme config.
+state, selected settings, screenshot), plus **only** the permanently signed
+Family Edition APK if held on the Docker host, and a local copy of the weather
+and Cosy theme config. Third-party installers are deliberately omitted: obtain
+them from their official sources when restoring.
 
 ```bash
 git pull --ff-only origin feature/firetv-home-overlay
