@@ -105,6 +105,18 @@ git pull --ff-only origin feature/firetv-home-overlay
 TV_HOST=<fire-tv-ip> bash tools/firetv-backup.sh
 ```
 
+To remove installers from any **older** Fire TV backup archives and extracted
+snapshots that were made before the no-APK policy, run:
+
+```bash
+python3 tools/firetv-prune-backups.py
+```
+
+This preserves the other captured files and replaces each modified archive's
+SHA-256 checksum; it leaves original downloads **outside the backup** and
+installed apps untouched. Previously copied archives on Windows or other
+storage need to be replaced with the sanitised copies.
+
 It saves `~/tv-tools/FireTV-FamilyEdition-Final-Backup-<timestamp>.tar.gz`
 with a matching `.sha256` checksum. Copy the private archive to separate,
 protected storage. **Never commit the archive, IP addresses, screenshots or
