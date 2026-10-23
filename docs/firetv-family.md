@@ -2,8 +2,9 @@
 
 **Experimental / opt-in.** The Fire OS 8 accessibility redirect is adapted from the
 [event-driven Fire TV Glass approach](https://github.com/ivantrj/firetv-glass-launcher).
-That project reports tests on AFTKRT / Android 11. This fork's Family Edition redirect
-still needs physical device testing before it is considered stable.
+This fork has now been tested on an AFTKRT / Fire OS 8 (Android SDK 30) Fire TV
+Stick 4K Max (2nd Gen). The HOME overlay works but has a **known Settings
+navigation conflict** described below; leave the Amazon system launcher enabled.
 
 ## Why this differs from Sony and TCL
 
@@ -55,6 +56,62 @@ service URL, then apply the folder with `tools/theme.sh`. Do not commit your
 LAN address to this public repository. The local weather service also needs
 the Fire TV's LAN IP in its allowlist; without that, weather updates return
 403. The procedural Cosy background itself does not depend on JPG files.
+
+## Field-test results and known limitation
+
+Verified on a real AFTKRT on 23 October 2026:
+
+- The permanently signed Family Edition APK installed successfully.
+- The six-column Cosy theme and optional local weather feed render correctly;
+  the weather endpoint returned HTTP 200 from the Fire TV.
+- Opening Prime Video and Plex, then pressing HOME, returned to Family Edition.
+- The accessibility service stayed enabled, bound and crash-free after reboot;
+  pressing HOME after boot returned to Family Edition.
+- Bringing the Amazon HOME activity to the foreground also returned to Family
+  Edition without a subsequent HOME key press.
+- Physical HOME remote, actual video/audio playback and Alexa were tested and work.
+- Sideloaded apps appeared in the app library.
+
+**Known issue — Fire TV Settings:** The current accessibility listener covers
+*any* window-state change from `com.amazon.tv.launcher`, not only
+`HomeActivity_vNext`. On this firmware, opening Amazon Settings from Family
+Edition may require a second press, and navigating Settings can unexpectedly
+bounce back to Family Edition. This was reproduced with the redirect ON and
+disappeared with it OFF. The device owner chose to keep the functioning HOME
+redirect and accept this inconvenience rather than change the service.
+
+When full Settings access is needed, temporarily disable the redirect:
+
+```bash
+TV_HOST=<fire-tv-ip> bash tools/firetv-home.sh off
+# Use Fire TV Settings normally. Amazon HOME will be active during this interval.
+TV_HOST=<fire-tv-ip> bash tools/firetv-home.sh on
+```
+
+Do not change the existing `HomeKeyService` for Sony/TCL to work around this
+Fire OS-specific behaviour.
+
+## Private backup and restore
+
+The reusable backup helper captures an **unprivileged ADB snapshot** of the
+Fire TV device (build info, installed/disabled packages, accessibility/HOME
+state, selected settings, screenshot), plus APK installers already held on the
+operator's Docker host and a local copy of the weather and Cosy theme config.
+
+```bash
+git pull --ff-only origin feature/firetv-home-overlay
+TV_HOST=<fire-tv-ip> bash tools/firetv-backup.sh
+```
+
+It saves `~/tv-tools/FireTV-FamilyEdition-Final-Backup-<timestamp>.tar.gz`
+with a matching `.sha256` checksum. Copy the private archive to separate,
+protected storage. **Never commit the archive, IP addresses, screenshots or
+private configuration to this public repository.** Signing keys are not backed
+up by this helper; keep the separate secure signing-key backup.
+
+Android prevents ordinary ADB backups of protected app data, VPN credentials,
+streaming sign-ins and Amazon account state. After a factory reset, those
+apps may need fresh sign-in even when their APKs are restored.
 
 ## Safety and testing
 
