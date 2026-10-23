@@ -42,6 +42,8 @@
     <string name="input_key_service_description">פותח את בורר הכניסות בלחיצה על כפתור הכניסות בשלט.</string>
     <string name="home_key_name">כפתור הבית</string>
     <string name="home_key_description">גורם לכפתור הבית בשלט לפתוח את מסך הבית הזה.</string>
+    <string name="fire_tv_home_name">מסך הבית של Family Edition ל־Fire TV</string>
+    <string name="fire_tv_home_description">פותח את Family Edition כאשר מסך הבית של Amazon מופיע. כדי לחזור למסך הבית של Amazon, יש להשבית שירות זה.</string>
     <string name="card_prompt_title">כרטיס חדש מאת %1$s</string>
     <string name="card_prompt_body">האפליקציה %1$s יכולה להציג כרטיס במסך הבית. אם הכרטיס יישאר מוסתר, אריח האפליקציה הרגיל יישאר ללא שינוי.</string>
     <string name="card_prompt_names">שם הכרטיס: «%1$s». שם האפליקציה: «%2$s».</string>

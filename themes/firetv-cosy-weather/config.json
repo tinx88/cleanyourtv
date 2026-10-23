@@ -1,0 +1,30 @@
+{
+  "wallpaper": true,
+  "wallpaper_order": "weather",
+  "weather_url": "",
+  "wallpaper_dim": 0,
+  "wallpaper_true_color": true,
+  "wallpaper_rotation_minutes": 0,
+  "sky_intensity": 0,
+  "ambient_glow": false,
+  "dock_apps": [
+    "com.plexapp.android",
+    "com.amazon.firebat",
+    "com.google.android.youtube.tv",
+    "org.jellyfin.androidtv"
+  ],
+  "hidden_apps": [
+    "com.amazon.tv.launcher"
+  ],
+  "right_icon_rail": true,
+  "icon_only_buttons": true,
+  "greeting_name": "Setiawan Family!",
+  "wifi_label_width": 0,
+  "app_library": true,
+  "library_button": true,
+  "columns": 6,
+  "dock_title": false,
+  "dock_row": true,
+  "rows_below_dock": 0,
+  "fill_dock": true
+}
