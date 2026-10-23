@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # AFTKRT Fire TV Stick 4K Max (2nd Gen) snapshot: private files stay on the operator's PC.
-# This saves reproducible settings, app/package inventory, screenshots and host-held APKs.
+# This saves reproducible settings, app/package inventory, screenshot and private theme.
 # Android/Fire OS does NOT grant ADB a full backup of private app data or logins.
 set -euo pipefail
 umask 077
@@ -18,7 +18,7 @@ folder="final-$stamp"
 out="$base/$folder"
 archive="$HOME/tv-tools/FireTV-FamilyEdition-Final-Backup-$stamp.tar.gz"
 
-mkdir -p "$out/device" "$out/apks" "$out/theme" "$out/host-weather"
+mkdir -p "$out/device" "$out/theme" "$out/host-weather"
 adb connect "$serial" >/dev/null
 tv() { adb -s "$serial" "$@"; }
 
@@ -67,18 +67,6 @@ else
     echo "Screenshot unavailable" >> "$out/manifest.txt"
 fi
 
-copy_apk() {
-    local source="$1" target="$2"
-    if [[ -s "$source" ]]; then
-        cp -p "$source" "$out/apks/$target"
-        echo "Saved APK: $target"
-    else
-        echo "Missing optional host APK: $source" >> "$out/manifest.txt"
-    fi
-}
-# Preserve only the permanently signed Family Edition installer; all other apps can be re-downloaded.
-copy_apk "$base/family-apk/family-edition-firetv-signed.apk" "family-edition-signed.apk"
-
 theme_dir="$base/firetv-cosy-weather-local"
 if [[ -f "$theme_dir/config.json" ]]; then
     cp -a "$theme_dir/." "$out/theme/"
@@ -111,22 +99,20 @@ if command -v docker >/dev/null 2>&1 && docker inspect familyos-tv-weather >/dev
       > "$out/host-weather/container-basic.txt"
 fi
 
-if compgen -G "$out/apks/*.apk" >/dev/null; then
-    (cd "$out/apks" && sha256sum -- *.apk) > "$out/apks/SHA256SUMS"
-fi
-
 cat > "$out/README-RESTORE.md" <<'EOF'
 # Private Fire TV restore reference
 
 This is a partial, non-root ADB backup, NOT a complete Fire OS image.
-It captures the package and debloat lists, accessibility/HOME state, only the
-permanently signed Family Edition APK (if present), and the private theme/weather configuration.
+It captures package and debloat lists, accessibility/HOME state, and the private
+theme/weather configuration. No APK installers or protected app data are included.
 
 ## Recover Family Edition
 
 1. Keep Amazon HOME and com.amazon.imp enabled; do not bulk-disable packages.
 2. Enable ADB on the AFTKRT Fire Stick and connect from Docker.
-3. Install the permanently signed Family Edition APK from apks/ (not an ephemeral CI preview).
+3. Obtain the trusted, permanently signed Family Edition APK from the approved
+   GitHub Actions signed artifact or your separate signing-key backup.
+   Do not use a disposable-signature CI preview.
 4. Apply the saved theme using TV_HOST=<ip> bash tools/theme.sh <extracted-backup>/theme.
 5. Enable and test the reversible HOME overlay using
    TV_HOST=<ip> bash tools/firetv-home.sh on
