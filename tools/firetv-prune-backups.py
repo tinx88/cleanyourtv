@@ -75,10 +75,13 @@ def scrub_archive(archive: Path) -> bool:
             os.replace(temp, archive)
         finally:
             temp.unlink(missing_ok=True)
-    checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
-    archive.with_name(archive.name + ".sha256").write_text(
-        f"{checksum}  {archive.name}\n", encoding="ascii"
-    )
+    sha = hashlib.sha256()
+    with archive.open("rb") as file:
+        for block in iter(lambda: file.read(1024 * 1024), b""):
+            sha.update(block)
+    checksum_file = archive.with_name(archive.name + ".sha256")
+    checksum_file.write_text(f"{sha.hexdigest()}  {archive.name}\n", encoding="ascii")
+    os.chmod(checksum_file, 0o600)
     print(f"Removed installers from archive: {archive}")
     return True
 
