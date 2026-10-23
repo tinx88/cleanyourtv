@@ -76,16 +76,8 @@ copy_apk() {
         echo "Missing optional host APK: $source" >> "$out/manifest.txt"
     fi
 }
+# Preserve only the permanently signed Family Edition installer; all other apps can be re-downloaded.
 copy_apk "$base/family-apk/family-edition-firetv-signed.apk" "family-edition-signed.apk"
-copy_apk "$base/media-apps/nuvio-armeabi-v7a.apk" "nuvio-armeabi-v7a.apk"
-copy_apk "$base/tailscale-android-universal-1.104.2.apk" "tailscale-android-universal-1.104.2.apk"
-plezy_dir="$base/media-apps/plezy"
-if [[ -d "$plezy_dir" ]]; then
-    plezy_apk="$(find "$plezy_dir" -type f -name '*.apk' -print -quit)"
-    if [[ -n "$plezy_apk" ]]; then
-        copy_apk "$plezy_apk" "plezy-armeabi-v7a.apk"
-    fi
-fi
 
 theme_dir="$base/firetv-cosy-weather-local"
 if [[ -f "$theme_dir/config.json" ]]; then
@@ -127,8 +119,8 @@ cat > "$out/README-RESTORE.md" <<'EOF'
 # Private Fire TV restore reference
 
 This is a partial, non-root ADB backup, NOT a complete Fire OS image.
-It captures the package and debloat lists, accessibility/HOME state, APK installers
-available on the Docker host, and the private theme/weather configuration.
+It captures the package and debloat lists, accessibility/HOME state, only the
+permanently signed Family Edition APK (if present), and the private theme/weather configuration.
 
 ## Recover Family Edition
 
@@ -139,7 +131,7 @@ available on the Docker host, and the private theme/weather configuration.
 5. Enable and test the reversible HOME overlay using
    TV_HOST=<ip> bash tools/firetv-home.sh on
 6. Verify Prime Video, Plex, physical HOME, playback and Alexa.
-7. Restore other apps from apks/ as required, and sign back in to them.
+7. Re-download third-party apps from their official sources as needed; sign back in.
 
 For immediate rollback:
    TV_HOST=<ip> bash tools/firetv-home.sh off
